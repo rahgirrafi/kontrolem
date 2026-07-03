@@ -1,0 +1,10 @@
+# Docs build environment (see .github/workflows/docs.yml).
+sphinx>=7
+furo
+myst-parser
+# Real (light) runtime deps so autodoc can import the packages; the heavy
+# ones (pinocchio, rclpy, control/slycot) are mocked in conf.py.
+numpy
+scipy
+flask
+pyyaml

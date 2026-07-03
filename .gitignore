@@ -1,0 +1,20 @@
+# Sphinx build output
+docs/_build/
+
+# Python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# colcon (if a workspace is built in-tree by mistake)
+build/
+install/
+log/
+
+
+paper/
+
+RESPONSE_VIZ_PLAN.md
+SETUP_ASSISTANT_PLAN.md
+JOSS_READINESS.md
+CITATION.cff
