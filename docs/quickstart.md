@@ -4,6 +4,15 @@ From a bare ROS 2 machine to an animated closed-loop response in five
 minutes, using the bundled example robot — a cart carrying a double
 inverted pendulum, linearized about its unstable upright equilibrium.
 
+```{admonition} This is the fast, command-line tour
+:class: tip
+
+It assumes you're comfortable in a terminal and just want the whole pipeline
+in one page. If you'd rather be walked through it gently — with what each
+step *means* — start with {doc}`the plain-language concepts <concepts>` and
+the {doc}`step-by-step tutorials <tutorials/index>` instead.
+```
+
 ## Install
 
 Requires **ROS 2 Humble** (or newer) and Python ≥ 3.10.

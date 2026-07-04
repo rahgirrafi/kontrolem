@@ -36,7 +36,7 @@ extensions = [
 ]
 
 source_suffix = {'.rst': 'restructuredtext', '.md': 'markdown'}
-myst_enable_extensions = ['colon_fence', 'deflist', 'fieldlist']
+myst_enable_extensions = ['colon_fence', 'deflist', 'fieldlist', 'dollarmath']
 myst_heading_anchors = 3
 
 templates_path = []

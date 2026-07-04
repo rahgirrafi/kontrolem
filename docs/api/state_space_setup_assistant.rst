@@ -34,11 +34,6 @@ benchmark — controller comparison
 
 .. automodule:: state_space_setup_assistant.benchmark
 
-response — closed-loop response step
-------------------------------------
-
-.. automodule:: state_space_setup_assistant.response
-
 yamlgen — config file generation
 --------------------------------
 
@@ -53,6 +48,15 @@ export — artifact bundle writer
 -------------------------------
 
 .. automodule:: state_space_setup_assistant.export
+
+ros2_control_export — runtime controller YAML writer
+----------------------------------------------------
+
+Writes the ``<name>_ros2_control.yaml`` file consumed by
+:doc:`kontrolem_controllers <../runtime/index>` at runtime — see the
+:doc:`export contract <../runtime/export_contract>`.
+
+.. automodule:: state_space_setup_assistant.ros2_control_export
 
 resources — package:// resolution
 ---------------------------------
