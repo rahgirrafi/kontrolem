@@ -13,3 +13,6 @@
 [submodule "packages/kontrolem_example_robots"]
 	path = packages/kontrolem_example_robots
 	url = https://github.com/rahgirrafi/kontrolem_example_robots.git
+[submodule "packages/kontrolem_controllers"]
+	path = packages/kontrolem_controllers
+	url = https://github.com/rahgirrafi/kontrolem_controllers.git
