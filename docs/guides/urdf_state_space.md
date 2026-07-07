@@ -27,9 +27,9 @@ model:
   urdf: package://kontrolem_example_robots/urdf/cart_double_inverted_pendulum.urdf
 
 joints:
-  cart_joint: {actuated: true, damping: 1.0}
-  joint1:     {actuated: true, damping: 0.05}   # first pendulum link
-  joint2:     {damping: 0.02}                   # passive/underactuated
+  cart_joint: {actuated: true, damping: 1.0}    # the only actuated joint
+  joint1:     {damping: 0.05}                    # first pendulum link (passive)
+  joint2:     {damping: 0.02}                    # second pendulum link (passive)
 
 outputs:
   velocities: true
@@ -58,9 +58,9 @@ from urdf_state_space import build_state_space
 ss = build_state_space(
     'robot.urdf',                                 # path or URDF XML string
     q_eq={'joint1': 0.2},                         # by name (or a full q vector)
-    actuated_joints=['cart_joint', 'joint1'],
+    actuated_joints=['cart_joint'],               # only the cart is driven
     velocity_outputs=True,                        # y = [q; q̇] of the outputs
-    joint_damping={'cart_joint': 1.0, 'joint1': 0.05},
+    joint_damping={'cart_joint': 1.0, 'joint1': 0.05, 'joint2': 0.02},
 )
 
 ss.A, ss.B, ss.C, ss.D    # numpy arrays

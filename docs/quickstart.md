@@ -41,8 +41,8 @@ ros2 run urdf_state_space urdf2ss \
     src/packages/urdf_state_space/examples/example_model.yaml
 ```
 
-This reads the example YAML — which names the URDF, the actuated joints
-(`cart_joint`, `joint1`; `joint2` stays passive), per-joint damping, and the
+This reads the example YAML — which names the URDF, the actuated joint
+(`cart_joint`; `joint1` and `joint2` stay passive), per-joint damping, and the
 operating point — linearizes analytically with Pinocchio, prints the
 `(A, B, C, D)` matrices, poles, controllability/observability, and writes
 `model.npz`. The upright pose is unstable: expect two poles in the right
