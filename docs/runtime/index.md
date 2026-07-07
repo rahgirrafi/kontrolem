@@ -43,6 +43,7 @@ these loaders.
 getting_started
 export_contract
 controllers/index
+diagnostics
 gazebo
 isaac
 ```

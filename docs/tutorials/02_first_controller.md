@@ -31,14 +31,16 @@ Click **Next**.
 This is where you say *what to balance* and *what the robot can push with*.
 
 - **Actuated joints** — tick the joints the robot can drive. For our robot,
-  tick `cart_joint` and `joint1`; leave `joint2` unticked (it's a free-
-  swinging link, like the top of a real double pendulum).
+  tick only `cart_joint`; leave `joint1` and `joint2` unticked (they're
+  free-swinging links, like the two segments of a real double pendulum). The
+  single cart force has to balance the whole pole through them — that's what
+  makes this the classic hard balancing problem.
 - **Operating point** — the pose to hold. The sliders are already at
   "straight up," which is what we want. Watch the 3D model as you nudge a
   slider, then set it back to zero.
 - Click **Auto-compute equilibrium**. This asks the app to double-check that
   "straight up" is a genuine balance point that needs no holding torque on
-  the passive joint. For this robot it is.
+  the passive joints. For this robot it is.
 
 Click **Next**.
 

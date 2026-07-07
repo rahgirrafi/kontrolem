@@ -12,11 +12,13 @@ It is Tustin-discretized once in `on_configure()` at the controller rate and
 stepped every cycle. This is why LQG needs no separate Kalman gain and no state
 estimate in the artifact — it is all inside `ctrl_*`.
 
-**Measurements.** The demo artifact uses position-only outputs
-(`cart_joint.q`, `joint1.q`), so the controller reads positions only and
-reconstructs the rest through the observer — the case where LQG beats bare LQR.
-If an artifact declares velocity outputs (`<joint>.qd`), velocity state is
-claimed automatically.
+**Measurements.** The demo artifact uses position-only outputs — every joint's
+encoder (`cart_joint.q`, `joint1.q`, `joint2.q`) but no velocities — so the
+controller reads positions only and reconstructs the velocities through the
+observer, the case where LQG beats bare LQR. Note the robot is driven by the
+cart alone, yet all three joints are *measured*: actuation and sensing are
+independent. If an artifact declares velocity outputs (`<joint>.qd`), velocity
+state is claimed automatically.
 
 **Artifact.** Requires the complete `ctrl_A/ctrl_B/ctrl_C/ctrl_D` group (no
 `K`). Loading a static-gain (`lqr`) artifact is rejected at configure time.

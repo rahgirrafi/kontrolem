@@ -45,9 +45,9 @@ ros2 launch kontrolem_gazebo gz_bringup.launch.py controller:=lqg
 ros2 launch kontrolem_gazebo gz_bringup.launch.py controller:=hinf
 ```
 
-Watch it hold with `ros2 topic echo /joint_states` — the top link (`joint2`) is
-**passive**, so it can only stay upright if the actuated `cart_joint`/`joint1`
-are actively stabilizing it.
+Watch it hold with `ros2 topic echo /joint_states` — both pendulum links
+(`joint1`, `joint2`) are **passive**, so they can only stay upright if the lone
+actuated `cart_joint` is actively stabilizing the whole pole.
 
 ## Test
 
@@ -74,9 +74,9 @@ These were hard-won; they live in the package `README.md` too.
   is not found by default. The launch injects it via `additional_env` on the
   `ign gazebo` process — a top-level `SetEnvironmentVariable` does **not**
   reliably reach that subprocess.
-- **Effort command interface.** The actuated joints expose `effort` command
-  interfaces; `gz_ros2_control` applies them directly, matching the controllers'
-  `command_interface: effort`.
+- **Effort command interface.** The actuated joint (`cart_joint`) exposes an
+  `effort` command interface; `gz_ros2_control` applies it directly, matching the
+  controllers' `command_interface: effort`.
 - **Dynamic compensators.** As everywhere, LQG/H∞ set `update_rate` explicitly
   equal to `controller_manager.update_rate` (the Tustin discretization rate).
 - **Log-scraping the activation.** A launch test keys on the controller's own

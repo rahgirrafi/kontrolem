@@ -9,10 +9,11 @@ Tustin discretization. The package only widens the accepted `controller_type`
 to `{hinf, hinf_mixsyn}`.
 
 **Measurements.** The demo artifact was synthesized with position *and* velocity
-outputs (`cart_joint.q`, `joint1.q`, `cart_joint.qd`, `joint1.qd`), so the
-controller claims velocity state too and the validity guard enforces both
-position and velocity bounds. Whether velocities are used is read from the
-artifact's `output_names`, not fixed in the plugin.
+outputs for every joint (`cart_joint.q`, `joint1.q`, `joint2.q`,
+`cart_joint.qd`, `joint1.qd`, `joint2.qd`), so the controller claims velocity
+state too and the validity guard enforces both position and velocity bounds.
+Only the cart is actuated, but all three joints are sensed. Whether velocities
+are used is read from the artifact's `output_names`, not fixed in the plugin.
 
 **Synthesis note (design-time).** On this plant the γ-optimal central controller
 carries ultra-fast modes (~1e9 rad/s) that no 100 Hz loop can realize; the
