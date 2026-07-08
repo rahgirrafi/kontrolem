@@ -141,6 +141,22 @@ ros2 launch kontrolem_bringup cart_pole_mpc_tracking.launch.py  # MPC follows a 
 The tracking variant uses the *future* reference over the horizon, so it tracks
 much tighter than feedback-only LQR. Configs: `config/cart_pole_mpc*.yaml`.
 
+## End-to-end smoke test
+
+The unit tests validate the ROS-free core; they do **not** cover the ros2_control
+runtime integration. `test/e2e_smoke.sh` closes that gap: it launches a demo,
+watches a joint settle, and reports PASS/FAIL (hard timeouts, self-cleaning). It
+is a standalone script, not a `colcon` launch-test, because full ros2_control
+launches flake under some CI/harness setups and a hanging test is worse than a
+script you run on purpose.
+
+```bash
+source install/setup.bash
+bash kontrolem_bringup/test/e2e_all.sh          # all demos (LQR/LGG/QP, 3 robots)
+# or one demo:
+bash kontrolem_bringup/test/e2e_smoke.sh cart_double_pole.launch.py pole1_joint 0.05
+```
+
 > All demos share one launch body — `launch/_common.py` (`build_sim_launch`);
 > the `*.launch.py` files differ only in URDF + controller YAML. That one runtime
 > hosts LQR (static gain), QP (online solve), LGG (dynamic compensator), **and**
