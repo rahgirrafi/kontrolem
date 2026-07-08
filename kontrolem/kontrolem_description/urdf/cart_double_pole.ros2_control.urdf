@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!-- Cart-double-inverted-pendulum for the M0-style e2e run on a HARD benchmark:
+     the same 3-DoF robot as kontrolem_model/robots/cart_double_pole.urdf, plus a
+     <ros2_control> block wiring it to the generic CartPoleSimSystem (it is generic
+     over fixed-base Euclidean URDFs — nq == nv — so no code change is needed).
+     Only cart_joint is actuated; both pole joints are state-only (passive). Both
+     poles start tilted 0.1 rad. -->
+<robot name="cart_double_pole">
+  <link name="base_link"/>
+
+  <joint name="cart_joint" type="prismatic">
+    <parent link="base_link"/><child link="cart"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit effort="1000" velocity="100" lower="-10" upper="10"/>
+  </joint>
+  <link name="cart">
+    <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="1.0"/>
+      <inertia ixx="0.0067" ixy="0" ixz="0" iyy="0.0067" iyz="0" izz="0.0067"/></inertial>
+  </link>
+
+  <joint name="pole1_joint" type="revolute">
+    <parent link="cart"/><child link="pole1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="0" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+  <link name="pole1">
+    <inertial><origin xyz="0 0 0.25" rpy="0 0 0"/><mass value="0.1"/>
+      <inertia ixx="0.00208" ixy="0" ixz="0" iyy="0.00208" iyz="0" izz="1e-5"/></inertial>
+  </link>
+
+  <joint name="pole2_joint" type="revolute">
+    <parent link="pole1"/><child link="pole2"/>
+    <origin xyz="0 0 0.5" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="0" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+  <link name="pole2">
+    <inertial><origin xyz="0 0 0.25" rpy="0 0 0"/><mass value="0.1"/>
+      <inertia ixx="0.00208" ixy="0" ixz="0" iyy="0.00208" iyz="0" izz="1e-5"/></inertial>
+  </link>
+
+  <ros2_control name="cart_double_pole_sim" type="system">
+    <hardware>
+      <plugin>kontrolem_description/CartPoleSimSystem</plugin>
+    </hardware>
+    <joint name="cart_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="pole1_joint">
+      <state_interface name="position"><param name="initial_value">0.1</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="pole2_joint">
+      <state_interface name="position"><param name="initial_value">0.1</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>

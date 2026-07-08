@@ -68,6 +68,29 @@ public:
   Linearization linearize(
     const Eigen::VectorXd & q, const Eigen::VectorXd & v, const Eigen::VectorXd & tau) const;
 
+  /// A predicted state trajectory: q[k], v[k] for k = 0..N (N+1 entries).
+  struct Trajectory
+  {
+    std::vector<Eigen::VectorXd> q;
+    std::vector<Eigen::VectorXd> v;
+  };
+
+  /// Roll the dynamics forward from (q0, v0) under the input sequence
+  /// `tau_seq` (N entries, each nv), one semi-implicit-Euler step of `dt` per
+  /// input, returning the N+1 states. Manifold-correct (uses integrate()).
+  /// An offline/synthesis query (allocates) — the prediction model for MPC's
+  /// `rollout` + `linearize_along` and for trajectory optimization.
+  Trajectory rollout(
+    const Eigen::VectorXd & q0, const Eigen::VectorXd & v0,
+    const std::vector<Eigen::VectorXd> & tau_seq, double dt) const;
+
+  /// Linearize the continuous dynamics at each (q[k], v[k], tau[k]) along a
+  /// trajectory, giving the per-step {A_k, B_k} of a time-varying (LTV)
+  /// prediction model. `q`, `v`, `tau` must have equal length. Offline.
+  std::vector<Linearization> linearize_along(
+    const std::vector<Eigen::VectorXd> & q, const std::vector<Eigen::VectorXd> & v,
+    const std::vector<Eigen::VectorXd> & tau) const;
+
   /// Forward dynamics a = ABA(q, v, tau). Exposed so the test can build
   /// f(x,tau) = [v; a] and finite-difference it against linearize().
   Eigen::VectorXd aba(

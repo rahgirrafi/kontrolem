@@ -85,6 +85,8 @@ ros2 launch kontrolem_bringup arm2.launch.py
 # MPC balances / follows a reference (constrained, receding-horizon)
 ros2 launch kontrolem_bringup cart_pole_mpc.launch.py
 ros2 launch kontrolem_bringup cart_pole_mpc_tracking.launch.py
+# LQR balances the cart-DOUBLE-inverted-pendulum (hard: 1 actuator, 2 poles)
+ros2 launch kontrolem_bringup cart_double_pole.launch.py
 ```
 
 Watch it: `ros2 topic echo /joint_states`, `ros2 control list_controllers`, and
@@ -98,10 +100,11 @@ colcon test --packages-select kontrolem_model kontrolem_control kontrolem_contro
 colcon test-result --all
 ```
 
-12 dependency-free ctests: model finite-difference (linearization, contact
-Jacobian), floating-base known-quantities (CoM, SE(3) integrate), the contract
-lifecycle, closed-loop stability/tracking for LQR/LQG/QP/MPC, and allocation +
-malloc audits proving `compute()` is allocation-free on every online path.
+14 dependency-free ctests: model finite-difference (linearization, contact
+Jacobian, rollout/linearize_along), floating-base known-quantities (CoM, SE(3)
+integrate), the contract lifecycle, closed-loop stability/tracking for
+LQR/LQG/QP/MPC (incl. the cart-double-inverted-pendulum), and allocation + malloc
+audits proving `compute()` is allocation-free on every online path.
 
 ## Status & design record
 
