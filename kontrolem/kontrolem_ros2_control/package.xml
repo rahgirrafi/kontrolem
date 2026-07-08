@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_ros2_control</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 Layer-4 runtime: a ros2_control controller that hosts any
+    kontrolem_control::Controller (LQR / QP task-space), bridging ros2_control
+    joint interfaces to the ROS-free core, plus a minimal supervisor. This is the
+    one package that depends on both ROS and the core.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>controller_interface</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>kontrolem_control</depend>
+  <depend>kontrolem_model</depend>
+  <depend>kontrolem_controllers</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

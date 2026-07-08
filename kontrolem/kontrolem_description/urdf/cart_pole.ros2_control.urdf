@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<!-- Cart-pole for the M0 end-to-end run: the same 2-DoF fixed-base robot as
+     kontrolem_model/robots/cart_pole.urdf, plus a <ros2_control> block wiring it
+     to our self-contained simulation hardware (CartPoleSimSystem). That hardware
+     integrates the TRUE cart-pole dynamics with kontrolem_model's ABA, so the
+     loop can be closed and the pole watched balancing WITHOUT Gazebo.
+
+     Underactuation is expressed structurally: only cart_joint exports an effort
+     command interface; pole_joint is state-only (no motor). Pinocchio ignores
+     the <ros2_control> tags, so this one file is parsed by BOTH the sim hardware
+     and the controller. -->
+<robot name="cart_pole">
+  <link name="base_link"/>
+
+  <joint name="cart_joint" type="prismatic">
+    <parent link="base_link"/>
+    <child link="cart"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" velocity="100" lower="-10" upper="10"/>
+  </joint>
+
+  <link name="cart">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.0067" ixy="0" ixz="0" iyy="0.0067" iyz="0" izz="0.0067"/>
+    </inertial>
+  </link>
+
+  <joint name="pole_joint" type="revolute">
+    <parent link="cart"/>
+    <child link="pole"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="0" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+
+  <!-- Pole: point mass at the tip (z = +0.5). Angle 0 = pointing up, unstable. -->
+  <link name="pole">
+    <inertial>
+      <origin xyz="0 0 0.5" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.00833" ixy="0" ixz="0" iyy="0.00833" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- ================= ros2_control wiring ================= -->
+  <ros2_control name="cart_pole_sim" type="system">
+    <hardware>
+      <plugin>kontrolem_description/CartPoleSimSystem</plugin>
+    </hardware>
+
+    <!-- Actuated: cart takes an effort command. Initial cart position 0. -->
+    <joint name="cart_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- Unactuated pole (no command interface). Start tilted 0.15 rad off
+         upright so there is something for the controller to stabilize. -->
+    <joint name="pole_joint">
+      <state_interface name="position">
+        <param name="initial_value">0.15</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>

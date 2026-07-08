@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_bringup</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 M0 bring-up: controller_manager config + launch that closes the
+    cart-pole loop end-to-end (kontrolem_description sim hardware +
+    kontrolem_ros2_control LQR/QP controller) without Gazebo.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>kontrolem_description</exec_depend>
+  <exec_depend>kontrolem_ros2_control</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

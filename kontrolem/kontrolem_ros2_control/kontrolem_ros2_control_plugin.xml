@@ -1,0 +1,12 @@
+<library path="kontrolem_ros2_control">
+  <class name="kontrolem_ros2_control/KontrolemController"
+         type="kontrolem_ros2_control::KontrolemController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Kontrol'Em v2 runtime: a ros2_control controller that hosts any
+      kontrolem_control::Controller plugin (LQR, QP task-space, ...), mapping
+      joint state/command interfaces to the ROS-free control core, with a
+      minimal supervisor acting on the controller's status().
+    </description>
+  </class>
+</library>

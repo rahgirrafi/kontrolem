@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_controllers</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 Layer-3 controller implementations. Interface-test slice:
+    LqrController (precomputed static-gain state feedback, CARE-synthesized) and
+    (next) a QP task-space controller — two structurally different controllers
+    behind the one kontrolem_control contract. ROS-independent core.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>kontrolem_control</depend>
+  <depend>kontrolem_model</depend>
+  <depend>osqp</depend>
+
+  <test_depend>ament_cmake_test</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,42 @@
+# controller_manager config for the M0 cart-pole end-to-end run.
+#
+# The robot_description string is NOT in this file: it is injected at launch time
+# as the `kontrolem_controller.robot_description` parameter (see
+# launch/cart_pole.launch.py), because it is a large XML blob better read from
+# the URDF file than pasted into YAML.
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz — firm-RT M0 target (Part A: ~200 Hz–1 kHz)
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+# Our hosting controller. control_law selects the paradigm (lqr | qp) — the
+# whole point of the v2 contract: one runtime, many controllers.
+kontrolem_controller:
+  ros__parameters:
+    control_law: lqr
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+
+    # Setpoint: upright pole, centered cart (state = [q(2); v(2)]).
+    q_ref: [0.0, 0.0]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+
+    # LQR weights. State order is [cart_pos, pole_angle, cart_vel, pole_vel];
+    # penalize pole angle most. r_diag is per actuated joint (the cart effort).
+    lqr.q_diag: [1.0, 10.0, 1.0, 1.0]
+    lqr.r_diag: [0.1]
+    lqr.q_dev_max: 1.0
+
+    # QP params (used only when control_law: qp).
+    qp.task_weight: [1.0, 10.0]
+    qp.kp: 50.0
+    qp.kd: 10.0
+    qp.tau_max: 20.0

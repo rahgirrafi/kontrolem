@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!-- Minimal cart-pole for the v2 interface-test slice.
+     2 DoF, fixed base: cart (prismatic x) + pole (revolute y).
+     Revolute (not continuous) joints so nq == nv == 2 (Euclidean config),
+     which keeps the finite-difference test manifold-free. Inertias are
+     plausible but not tuned — the FD test checks derivative *consistency*,
+     not physical fidelity. -->
+<robot name="cart_pole">
+  <link name="base_link"/>
+
+  <joint name="cart_joint" type="prismatic">
+    <parent link="base_link"/>
+    <child link="cart"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" velocity="100" lower="-10" upper="10"/>
+  </joint>
+
+  <link name="cart">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.0067" ixy="0" ixz="0" iyy="0.0067" iyz="0" izz="0.0067"/>
+    </inertial>
+  </link>
+
+  <joint name="pole_joint" type="revolute">
+    <parent link="cart"/>
+    <child link="pole"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="0" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+
+  <!-- Pole: massless rod with a point mass at the tip (z = +0.5).
+       Angle 0 = pole pointing up (+z), the unstable equilibrium. -->
+  <link name="pole">
+    <inertial>
+      <origin xyz="0 0 0.5" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.00833" ixy="0" ixz="0" iyy="0.00833" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+</robot>

@@ -1,0 +1,44 @@
+# controller_manager config for the M0 2-DoF arm end-to-end run (QP task-space).
+#
+# The robot_description string is injected at launch time as
+# `kontrolem_controller.robot_description` (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+# QP task-space / inverse-dynamics law. The arm is FULLY actuated (both joints
+# take effort), so the QP's equality M q̈ + h = Sᵀτ is well-posed and it
+# regulates q -> q_ref by gravity + inertia compensation, subject to torque limits.
+kontrolem_controller:
+  ros__parameters:
+    control_law: qp
+    actuated_joints: ["shoulder_joint", "elbow_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+
+    # Setpoint: both links horizontal (angle 0) — holding it needs continuous
+    # gravity-compensation torque, so the QP has real work to do.
+    q_ref: [0.0, 0.0]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+
+    # QP params. task_weight per joint; kp/kd set the desired q̈ = -kp e - kd ė
+    # (kd = 2*sqrt(kp) => critically damped). tau_max = 30 Nm: holding needs ~19.6,
+    # so it converges, while the large-error transient saturates the limit
+    # (constraint active, enforced by the QP — not clamped post-hoc).
+    qp.task_weight: [1.0, 1.0]
+    qp.kp: 100.0
+    qp.kd: 20.0
+    qp.tau_max: 30.0
+
+    # LQR params are unused here (control_law: qp) but kept for easy switching.
+    lqr.q_diag: [1.0, 1.0, 1.0, 1.0]
+    lqr.r_diag: [0.1, 0.1]
+    lqr.q_dev_max: 1.0

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_description</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 example robot description (cart-pole) plus CartPoleSimSystem: a
+    self-contained ros2_control simulation hardware that integrates the URDF's
+    true dynamics with kontrolem_model ABA, so the M0 loop runs end-to-end
+    without Gazebo.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>kontrolem_model</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
