@@ -457,6 +457,15 @@ Priority order agreed with the user: (1) observability, (2) package hygiene,
     pole needs ≈0.24 s (N≈12 at dt_mpc=0.02); LQR (exact continuous CARE, infinite
     horizon) has no such sensitivity. A real, honest limitation of the approach.
 
+- `[x]` C6 — **automated e2e smoke test** (the runtime integration was only
+  manually verified). `kontrolem_bringup/test/e2e_smoke.sh` launches a demo,
+  watches a joint settle, PASS/FAIL with hard timeouts + self-cleanup;
+  `e2e_all.sh` runs the suite. **All pass** (LQR cart-pole, LQG, LQR
+  cart-double-pole, QP arm — 3 robots × 3 paradigms). Deliberately a **standalone
+  script, not a colcon launch-test**: full ros2_control launches flake under this
+  harness (a hanging/flaky test is worse than a script run on purpose) — an honest
+  tradeoff. Guards the runtime integration the 14 unit tests don't cover.
+
 **Consolidation phase outcome:** the endorsed priorities are done — observability
 (C1) and the front-door README (C3) landed; the region-metric debt (C4a) is paid;
 the M2.5 model queries (`rollout`/`linearize_along`) are in; the framework is
