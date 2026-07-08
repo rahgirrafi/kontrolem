@@ -16,6 +16,7 @@
 #include <Eigen/Dense>
 
 #include "kontrolem_controllers/lqr_controller.hpp"
+#include "kontrolem_controllers/mpc_controller.hpp"
 #include "kontrolem_controllers/qp_task_space_controller.hpp"
 #include "kontrolem_model/robot_model.hpp"
 
@@ -93,19 +94,29 @@ int main()
   QpTaskSpaceController qp({"cart_joint"}, W, 50.0, 10.0, 5.0);
   qp.configure(model, *qp.synthesize(model, upright), upright);
 
+  // MPC: a larger online QP (N*m = 30 decision vars) through the same seam.
+  Eigen::MatrixXd Qm = Eigen::Vector4d(1.0, 10.0, 1.0, 1.0).asDiagonal();
+  MpcController mpc({"cart_joint"}, Qm, Eigen::MatrixXd::Constant(1, 1, 0.1),
+                    /*horizon=*/30, /*dt_mpc=*/0.02, /*tau_max=*/6.0);
+  mpc.configure(model, *mpc.synthesize(model, upright), upright);
+
   const int N = 1000;
   for (int i = 0; i < 20; ++i) {  // warm up past any lazy first-solve init
     lqr.compute(s, upright, 0.001);
     qp.compute(s, upright, 0.001);
+    mpc.compute(s, upright, 0.001);
   }
 
   const long lqr_m = count_mallocs(lqr, s, upright, N);
   const long qp_m = count_mallocs(qp, s, upright, N);
+  const long mpc_m = count_mallocs(mpc, s, upright, N);
 
   std::cout << "compute() over " << N << " calls (malloc/calloc/realloc count):\n";
   std::cout << "  LqrController          : " << lqr_m << "  (" << (double)lqr_m / N << "/call)\n";
   std::cout << "  QpTaskSpaceController  : " << qp_m << "  (" << (double)qp_m / N
             << "/call)  <- includes OSQP's C allocations\n";
+  std::cout << "  MpcController          : " << mpc_m << "  (" << (double)mpc_m / N
+            << "/call)  <- 30-var condensed QP, same OSQP seam\n";
 
   // Both paths must be malloc-free. QP reaching 0 depends on the control-loop
   // OSQP config (polish=0, adaptive_rho=0 in qp_solver.cpp): this assertion
@@ -115,8 +126,9 @@ int main()
   // max_iter. That is a separate, later concern.
   const bool lqr_clean = (lqr_m == 0);
   const bool qp_clean = (qp_m == 0);
-  const bool ok = lqr_clean && qp_clean;
+  const bool mpc_clean = (mpc_m == 0);
+  const bool ok = lqr_clean && qp_clean && mpc_clean;
   std::cout << (ok ? "PASS" : "FAIL") << ": LQR malloc-free=" << lqr_clean
-            << " QP malloc-free=" << qp_clean << "\n";
+            << " QP malloc-free=" << qp_clean << " MPC malloc-free=" << mpc_clean << "\n";
   return ok ? 0 : 1;
 }

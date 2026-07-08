@@ -205,15 +205,15 @@ Not started; listed so the slice's scope stays honest.
   `launch/_common.py` (`build_sim_launch`); cart-pole=LQR, arm2=QP.
   - `[ ]` (deferred, per plan B6) `kontrolem_problem` / `kontrolem_solvers` split,
     `kontrolem_msgs` — earned when a second consumer/dialect appears.
-- **M1** *(in progress)*: LQG/H∞ + `kontrolem_synthesis` (Python design tool) +
-  `Tracking`.
+- **M1** *(in progress)*: LQG + `Tracking` (time-varying reference). **H∞ is
+  descoped** — see the note below; the LQG line's "earned by H∞" caveat is moot.
   - `[x]` **LQG output-feedback compensator (`LqgController`, C++).** The THIRD
     structural form behind the one contract: a *dynamic* controller with internal
     observer state (LQR = static gain, QP = stateless solve, **LQG = compensator
     with memory**). Method: separation principle — control gain `K` from the
     control CARE (as LQR) + steady-state Kalman gain `L` from the **dual/filter
     CARE**, i.e. the *same* `care.hpp` with `A→Aᵀ, B→Cᵀ, Q→W, R→V` (no new solver,
-    no Python/slycot yet — that is earned by H∞). Measures **positions only**
+    all in-house Eigen). Measures **positions only**
     (`C=[I 0]`), estimates velocity; `capabilities().needs_velocity_state=false`.
     Runtime realization = Euler-stepped observer in deviation coords
     (`x̂̃ ← x̂̃ + dt(A_obs x̂̃ + B_act ũ + L ỹ)`, `ũ=−K x̂̃`), allocation-free.
@@ -223,18 +223,216 @@ Not started; listed so the slice's scope stays honest.
     (`cart_pole_lqg.launch.py`): pole 0.15→0, cart→0, matching the offline
     output-feedback reference. This is the first M1-defining result: output
     feedback fits the unchanged `compute()`.
-  - `[ ]` **Honor `needs_velocity_state=false` in the runtime** — LQG currently
-    still *claims* velocity interfaces (the sim provides them; LQG ignores them
-    internally, so the control-theoretic output-feedback claim holds). Making the
-    runtime claim positions-only when the law declares it is a small, separable
-    Layer-4 refinement (gate `state_interface_configuration` / `on_activate` /
-    `update` on the capability). Deferred, flagged.
-  - `[ ]` H∞ (needs slycot → the Python `kontrolem_synthesis` engine), `Tracking`
-    dialect + trajectory reference.
+  - `[x]` **Honor `needs_velocity_state=false` in the runtime.** `KontrolemController`
+    now caches the law's `needs_velocity_state` at `on_configure` and gates
+    `state_interface_configuration` (claim velocity only if needed), `on_activate`
+    (resolve `vel_idx_` only if needed), and `update` (read velocity only if
+    claimed; else `State::v` stays zero) on it. **Verified e2e:** with LQG,
+    `ros2 control list_controllers --verbose` shows required state interfaces =
+    `{cart,pole}/position` **only** (no velocity) and the pole still balances
+    (velocity estimated internally); LQR/QP/tracking still claim position+velocity
+    and are unaffected. The capability system now genuinely drives interface
+    claiming — output feedback is real at the interface level, not just internal.
+  - `[x]` **`Tracking` dialect + trajectory reference.** A second `ControlProblem`
+    dialect (time-varying reference) behind a `TrajectorySource` seam
+    (`kontrolem_control/trajectory.hpp`: abstract `TrajectorySource` +
+    `ConstantReference` (= Regulation as a degenerate trajectory) +
+    `HarmonicReference`, all allocation-free `sample(t, …)`). **`LqrController` now
+    accepts BOTH `Regulation` and `Tracking`** — the same gain law
+    `u = u_eq − K(x − x_ref)` serves both; only `x_ref` differs (fixed setpoint vs
+    reference sampled at `state.t`). This is the first real exercise of the
+    capability-typed-problem thesis with >1 dialect: one controller, two dialects,
+    per-tick narrowing on `problem.kind()`. Operating point for the gain =
+    reference at t=0 (LTV re-linearization is M2/MPC). Offline: the cart tracks
+    `A cos(ωt)` with error scaling as expected with ω (0.014/0.041/0.155 at
+    ω=0.3/0.5/1.0 — textbook feedback-only lag). Test `lqr_tracking` (8th test)
+    gates: accepts both dialects, cart follows the reference (amp≈A, err<0.1),
+    pole upright. **Ran e2e** (`cart_pole_tracking.launch.py`, runtime builds a
+    `Tracking`+`HarmonicReference` from params, `State::t` from the activation
+    clock): cart follows `0.3 cos(0.5 t)` while balancing the pole (|pole|<0.04).
+    Note: **feedback-only.** Acceleration feedforward was implemented and then
+    **reverted** — an honest finding: a linear model-based feedforward
+    `u_ff = B⁺(ẋ_ref − A·x̃_ref)` was built (with `TrajectorySource::sample` now
+    also emitting the reference acceleration `a_out`), but it gave *no* tracking
+    improvement (0.015/0.044/0.163 vs 0.014/0.041/0.155 at ω=0.3/0.5/1.0). The
+    reason is control-theoretic, not a bug: the demo reference "cart moves while
+    the pole stays *exactly* upright" is **dynamically infeasible** for the
+    underactuated cart-pole (you cannot accelerate the cart without tilting the
+    pole), so no feedforward can realize it — feedback does the work regardless.
+    Feedforward pays off only for a *feasible* / fully-actuated reference; deferred
+    until such a case exists (e.g. LQR-tracking on a fully-actuated arm, or MPC).
+    The reference-acceleration plumbing (`a_out`) is kept as it costs ~nothing and
+    MPC will use it; the unused feedforward gemvs were removed (ship only what's
+    demonstrably beneficial).
+  - `[~]` **H∞ — DESCOPED (user decision, 2026-07-08).** Not implemented and
+    removed from the roadmap "for now." *Rationale:* it is the only planned
+    controller that needs **slycot** (Python) for its DGKF two-Riccati synthesis,
+    which would force the cross-language Python synthesis engine + artifact-
+    serialization boundary before they are otherwise needed, plus a
+    dependency-availability risk in this environment. LQR/LQG/QP already prove the
+    three structural forms (static gain / dynamic compensator / online solve)
+    without it. If robustness is wanted later, it can be re-added behind the same
+    contract. Correspondingly, `kontrolem_synthesis` (the Python design tool) is
+    **no longer an M1 requirement** — synthesis stays in-process C++ until a
+    controller actually needs an offline/Python design step.
 - **M1.5:** LPV / gain-scheduling (`ScheduledRegulation` dialect).
-- **M2:** linear MPC (`kontrolem_mpc`) + `linearize_along`/`rollout` model queries.
-- **M3:** floating base (SE(3)) + `kontrolem_state_bridge` + non-joint interfaces;
-  **contact-detection producer decision** (Part D open gap).
+- **M2** *(in progress)*: linear MPC + `linearize_along`/`rollout` model queries.
+  - `[x]` **M2.1 — `MpcController` core + offline proof + test.** LTI condensed
+    receding-horizon control, the *fourth* paradigm behind the one contract and the
+    plan's payoff for the offline/online seam. **synthesize/configure** (heavy,
+    once): `model.linearize` at the operating point → Euler-discretize `(A_d,B_d)`
+    → discrete-LQR terminal cost via a new `solve_dare` (added to `care.hpp`,
+    reusing that seam) → **condense** the horizon into a dense QP in the input
+    sequence `U` (`X = Sx x0 + Su U`; Hessian `H = 2(SuᵀQ̄Su+R̄)` constant, gradient
+    map `G` with `q = G·x0`). **compute** (per tick): `x0 ←` deviation state,
+    `q = G x0`, warm-solve via the **`QpSolver`/OSQP seam** (reused unchanged), apply
+    `u_0` (recede). Input box `−τ_max ≤ u_k ≤ τ_max` is a hard QP constraint.
+    Offline (cart-pole, pole 0.15→upright): unconstrained regulates (peak τ 7.1);
+    **tight `τ_max=3` → QP clamps to exactly 3.0 (constraint active, not post-hoc)
+    and still stabilizes.** Test `mpc_cartpole` (9th test) gates stabilization +
+    limit-respected + limit-active. **Plan deviation (noted):** `MpcController`
+    lives in `kontrolem_controllers` for now (reuses `QpSolver` in place, no new
+    heavy dep) rather than a separate `kontrolem_mpc` package (plan B10) — extract
+    when it grows. Discretization is Euler (fine here; exact/`rollout` +
+    `linearize_along` for LTV is a later step).
+  - `[x]` **M2.2 — runtime wiring + e2e.** `control_law: mpc` added to the runtime
+    factory (params `mpc.q_diag/r_diag/horizon/dt_mpc/tau_max`). Ran e2e
+    (`cart_pole_mpc.launch.py`, N=30, dt_mpc=0.02, τ_max=6): pole 0.15→0, cart
+    returns to centre (more cart travel in the transient because the hard τ_max caps
+    the pull-back). Four paradigms now run through the identical runtime
+    (LQR/LQG/QP/MPC by `control_law`).
+  - `[x]` **M2.3 — RT allocation audit of MPC `compute()`.** Extended
+    `test_malloc_audit` to cover MPC: the **30-var condensed QP solves malloc-free
+    (0/call over 1000 calls)** through the same `QpSolver`/OSQP seam (control-loop
+    config, D10). So the RT allocation story now covers all three online/gemv paths
+    (LQR 0, QP task-space 0, MPC 0). Caveat unchanged: 0-alloc is necessary not
+    sufficient for hard-RT — OSQP iteration count is still data-dependent (cap
+    `max_iter` for a hard-RT deployment; separate later concern).
+  - `[x]` **M2.4 — Tracking-MPC (horizon reference).** `MpcController` now accepts
+    `Tracking` too: each tick it samples the reference at the N future horizon times
+    and adds the tracking gradient `q -= M_ref·Xref_dev` (`M_ref = 2 SuᵀQ̄` stored in
+    the artifact; sampling + gemv preallocated, still malloc-free). This is the
+    predictive advantage, **quantified**: on the cart following `0.3cos(ωt)` MPC
+    tracks **~6× tighter than feedback-only LQR** — err 0.0028/0.0073/0.0266 vs
+    0.014/0.041/0.155 at ω=0.3/0.5/1.0. (Notably MPC tracks this *infeasible*
+    reference well where the LQR feedforward couldn't — it optimizes the error over
+    the whole horizon rather than inverting one instant.) Test `mpc_tracking` (10th
+    test); **ran e2e** (`cart_pole_mpc_tracking.launch.py`): cart follows the
+    reference tight to ±0.30, pole within ±0.04. Regulation MPC unchanged (no
+    regression).
+  - `[ ]` M2.5 — LTV re-linearization (`rollout` + `linearize_along` model queries)
+    for nonlinear-along-trajectory MPC. Needs new **Layer-1 API** — a larger step,
+    deferred.
+
+  → **M2 (LTI linear MPC) COMPLETE.** A fourth paradigm — constrained
+  receding-horizon optimal control — runs behind the one contract, on both dialects
+  (Regulation + Tracking), e2e through the identical runtime, malloc-free, with the
+  predictive tracking advantage measured. Only LTV (M2.5) remains, gated on new
+  model-service queries.
+- **M3** *(in progress)*: floating base (SE(3)) + `kontrolem_state_bridge` +
+  non-joint interfaces; **contact-detection producer decision** (Part D open gap).
+  De-risking the **model layer offline first**, before any ROS plumbing.
+  - `[x]` **M3.1 — floating-base model service (SE(3)-aware).** `RobotModel` gained
+    a `BaseType{kFixed,kFloating}` build arg (Pinocchio free-flyer root), plus
+    `center_of_mass(q)`, `neutral()`, and a manifold-correct `integrate(q,v,dt)`
+    (group exp — quaternion stays unit). New test robot
+    `robots/floating_biped.urdf` (floating trunk + 2 legs + foot links;
+    nq=9, nv=8). Test `floating_base` (11th test) checks against KNOWN quantities:
+    nq==nv+1, unit quaternion at neutral, **CoM exactly matches the hand
+    computation** (z=−0.0295), and π/2-yaw `integrate` gives the exact quaternion
+    (norm preserved) where a naive `q+v·dt` breaks the norm. This addresses Part D
+    D2 (SE(3) convention risk) at the model layer. **Build note:** the
+    `from_urdf_*` signature changed (added defaulted `BaseType`) — an ABI change,
+    so a **full `colcon build`** is required (a partial rebuild leaves stale
+    controller binaries referencing the old symbol; caught + fixed).
+  - `[x]` **M3.2 — contact Jacobians.** `RobotModel::contact_jacobian(q, frame) →
+    3×nv` (world-aligned translational, `v_world = J·v`) + `frame_position(q,
+    frame)`. Test `contact_jacobian` (12th test) validates it by finite-difference
+    of the foot's world position under **manifold** perturbations of q (including
+    the 6-DoF floating-base root tangent): `max|J − J_fd| = 1.4e-07`. This is the
+    key WBC ingredient (foot no-slip / friction-cone / `Jᵀλ`) and further de-risks
+    the SE(3) conventions (Part D D2). Model-layer floating-base support is now
+    complete and fully validated offline.
+  - `[x]` **M3.3 — non-joint-state SPIKE (flagged substrate-strain checkpoint).**
+    Built the minimal proof and got a **GO verdict**. Pieces: `FloatingBaseSimSystem`
+    (integrates SE(3) dynamics via `aba` + manifold `integrate`, exports base
+    pose/twist as 13 scalar interfaces on a `<gpio name="floating_base">` block +
+    joint states); `FloatingStateProbe` controller (claims the base scalars + joint
+    states, reassembles a manifold-correct `State`, normalizes the quaternion,
+    computes CoM); `floating_biped.ros2_control.urdf` + `floating_spike.launch.py`.
+    **Result:** `ros2 control list_hardware_interfaces` shows the base
+    `floating_base/pose.*`/`twist.*` scalars exported and claimable; the probe
+    reassembles the base falling under gravity with **quat_norm = 1.000000** and
+    **CoM tracking base_z exactly** (offset −0.03) — the round-trip
+    SE(3) pose → scalar interfaces → manifold `State` is exact.
+    **Verdict: viable, NOT intolerably ugly → proceed ros2_control-native** (no
+    pivot to a middleware-neutral surface). Real awkwardness noted, all tractable:
+    (a) 13 verbose scalar interfaces per base under a Kontrol'Em naming convention;
+    (b) the consumer must know the q/v index layout (SE(3) root at q0..6/v0..5,
+    joints after) — factor into a `BaseStateSensor` semantic component; (c)
+    quaternion needs normalizing after transport; (d) twist is in the free-flyer
+    local frame (a documented convention). *(Launch gotcha: array params
+    (`joints`) must go in the controllers YAML, not an inline dotted-dict on the
+    CM node — that only reliably carried the scalar `robot_description`.)*
+  - `[~]` **M3.4 — productionize the spike** (given GO):
+    - `[x]` **`BaseStateSensor` semantic component** — a self-contained helper
+      (mirrors ros2_control's `IMUSensor`/`ForceTorqueSensor`) that owns the base
+      interface-naming convention (13 scalars) and the reassembly into the SE(3)
+      root slots `q(0..6)/v(0..5)` **incl. quaternion normalization**, so no
+      controller re-derives that coupling. `FloatingStateProbe` refactored to use
+      it — re-ran the spike, identical result (quat_norm=1, CoM tracks base_z).
+    - `[ ]` **`ContactSensor` component + the contact-signal PRODUCER decision**
+      (Part D D1 open gap) — the next real fork; surfaced to the user.
+    - `[ ]` fold base/contact needs into `Capabilities`; `[ ]` `kontrolem_state_bridge`
+      (topic→interface) for a real estimator.
+  - `[ ]` M3.5 — validation through the runtime against a known quantity.
+### Consolidation phase (M3 paused by user; harden the fixed-base framework)
+
+Priority order agreed with the user: (1) observability, (2) package hygiene,
+(3) top-level README/getting-started, (4) finish M2.5 + region metric.
+
+- `[x]` **C1 — Observability: `kontrolem_msgs` + telemetry.** New `kontrolem_msgs`
+  package (rosidl) with `ControllerDiagnostics` (named fields: `control_law`, `q`,
+  `v`, `q_ref`, `tau`, `ok`, `margin`, `safe_action`, `update_us`) — replaces the
+  v1 `Float64MultiArray`-layout approach. `KontrolemController` publishes it on
+  `~/diagnostics` each tick via a **`realtime_tools::RealtimePublisher`**
+  (best-effort `trylock`), gated by an opt-in `publish_diagnostics` param
+  (default false). **Verified e2e:** `ros2 topic echo
+  /kontrolem_controller/diagnostics` shows the named fields live (LQR `update_us`
+  ≈ 0.87 µs). 7 packages now.
+- `[!]` C2 — package hygiene: extract `kontrolem_mpc` + `kontrolem_problem`.
+  **DEFERRED (revised assessment).** Scoping showed this is *medium*-risk, not the
+  "low-risk" I first called it: a clean split needs **3 new packages**
+  (`kontrolem_solvers` for the shared `care.hpp`/`qp_solver`, then `kontrolem_mpc`
+  + `kontrolem_problem`) touching ~20 files across include paths and namespaces
+  (17 files do `using namespace kontrolem_control`). And the present payoff is
+  thin — paradigm packages already get the problem+contract types *without*
+  depending on the impl package, so the split mostly buys future-proofing. A
+  churny, regression-prone refactor with marginal current value is better done as
+  a focused, reviewed effort than in an autonomous loop. Revisit when a second
+  paradigm package (WBC) actually needs the isolation.
+- `[x]` C3 — top-level project README + getting-started. Front-door `README.md`
+  at the workspace root: what Kontrol'Em is, the paradigm table, the 4-layer
+  architecture, package list, build (cmeel), the demo launches, tests, status.
+- `[x]` C4a — **region-metric fix** (the flagged cart-position issue). Replaced
+  `LqrController`'s box `max|q−q_eq|` with a **Q-weighted trust distance**
+  `sqrt(devᵀ Q dev / trace(Q))`, `dev = x − x_eq`. Reuses the controller's own `Q`
+  (which already down-weights the translation-invariant cart position ~10× vs the
+  pole), so cart travel no longer spuriously trips the region — `q_dev_max` stays
+  the intuitive threshold, and it's allocation-free (preallocated `Q·dev`).
+  Restored `q_dev_max: 0.5` on the cart-pole demo; **verified e2e: 0 supervisor
+  cuts** (was the reason for the `1.0` workaround). All 12 tests still green
+  (region flag, allocation + malloc audits included).
+- `[ ]` C4b — **LTV MPC (M2.5)** — deferred: needs new Layer-1 model queries
+  (`rollout` + `linearize_along`) for nonlinear-along-trajectory prediction. A
+  real API-growth step, left as a clear next item.
+
+**Consolidation phase outcome:** the endorsed priorities are done — observability
+(C1) and the front-door README (C3) landed; the region-metric debt (C4a) is paid;
+package hygiene (C2) and LTV MPC (C4b) are consciously deferred with reasons. The
+fixed-base framework is now materially more production-solid (inspectable, tighter
+supervisor, documented).
+
 - **M4:** QP-WBC (`kontrolem_wbc`) + `kontrolem_go2` + supervisor transitions.
   (Standing + push-recovery only — **no locomotion**, per Part D.)
 

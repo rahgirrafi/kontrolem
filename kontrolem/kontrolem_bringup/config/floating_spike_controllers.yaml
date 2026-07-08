@@ -1,0 +1,17 @@
+# M3 spike: just a controller_manager + joint_state_broadcaster, to load the
+# FloatingBaseSimSystem and inspect the exported interfaces (including the base
+# <gpio> scalars). The FloatingStateProbe controller is added separately.
+controller_manager:
+  ros__parameters:
+    update_rate: 200
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    floating_state_probe:
+      type: kontrolem_ros2_control/FloatingStateProbe
+
+floating_state_probe:
+  ros__parameters:
+    base_gpio: floating_base
+    joints: ["hip_left", "hip_right"]

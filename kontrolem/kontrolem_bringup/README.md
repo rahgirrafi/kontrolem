@@ -116,7 +116,33 @@ ros2 launch kontrolem_bringup cart_pole_lqg.launch.py
 The pole balances from 0.15 rad using position measurements alone. Config:
 `config/cart_pole_lqg_controllers.yaml` (`control_law: lqg`).
 
+### 6. Cart following a moving reference (Tracking dialect, M1)
+
+Same cart-pole, same LQR gain law — but the *problem* is a time-varying reference
+instead of a fixed setpoint: the cart follows `0.3·cos(0.5 t)` while balancing:
+
+```bash
+ros2 launch kontrolem_bringup cart_pole_tracking.launch.py
+```
+Watch `cart_joint` oscillate ~±0.3 m while `pole_joint` stays near 0. Config:
+`config/cart_pole_tracking_controllers.yaml` (`reference_type: harmonic`). This
+shows ONE controller accepting two problem dialects (Regulation + Tracking).
+
+### 7. Linear MPC (M2)
+
+Constrained receding-horizon control — solves a QP over an N-step horizon each
+tick and applies the first input, honouring a hard torque limit *inside* the
+optimization:
+
+```bash
+ros2 launch kontrolem_bringup cart_pole_mpc.launch.py           # MPC regulates (balances)
+ros2 launch kontrolem_bringup cart_pole_mpc_tracking.launch.py  # MPC follows a moving reference
+```
+The tracking variant uses the *future* reference over the horizon, so it tracks
+much tighter than feedback-only LQR. Configs: `config/cart_pole_mpc*.yaml`.
+
 > All demos share one launch body — `launch/_common.py` (`build_sim_launch`);
 > the `*.launch.py` files differ only in URDF + controller YAML. That one runtime
-> hosts LQR (static gain), QP (online solve), **and** LQG (dynamic compensator) is
-> the whole point of the v2 contract.
+> hosts LQR (static gain), QP (online solve), LGG (dynamic compensator), **and**
+> MPC (receding-horizon), and one controller serves both the Regulation and
+> Tracking dialects, is the whole point of the v2 contract.

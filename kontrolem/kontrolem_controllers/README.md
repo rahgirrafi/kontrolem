@@ -10,13 +10,21 @@ Prove that one plugin contract (`compute(state, problem, dt) → command`) fits
 **three structurally different** control laws:
 - **`LqrController`** — a *precomputed static gain* (no internal state).
   `synthesize` linearizes at the operating point and solves CARE offline;
-  `compute` is a matrix–vector product.
+  `compute` is a matrix–vector product. Accepts **two dialects** — `Regulation`
+  (fixed setpoint) and `Tracking` (a `TrajectorySource` sampled each tick) —
+  behind the same gain law `u = u_eq − K(x − x_ref)`.
 - **`QpTaskSpaceController`** — a *stateless online solve*: builds and solves an
   inverse-dynamics QP every tick with an active torque limit.
 - **`LqgController`** — a *dynamic output-feedback compensator* (internal
   observer state). Control gain from the control CARE + Kalman gain from the
   **dual/filter CARE** (separation principle); measures positions only, estimates
   velocity. Proves `compute()` fits a controller *with memory*.
+- **`MpcController`** — *constrained receding-horizon* linear MPC. `synthesize`
+  linearizes + discretizes + condenses the horizon into a dense QP (with a
+  discrete-LQR terminal cost via `solve_dare`); `compute` builds the gradient
+  (`q = G·x0` [− `M_ref·Xref` when tracking]) and warm-solves via the same
+  `QpSolver`/OSQP seam, applying the first input. Hard torque limits live inside
+  the QP. Accepts Regulation and Tracking; malloc-free.
 
 Also provides `care.hpp`, a small Eigen-only CARE solver — reused for both the
 control Riccati and (transposed) the filter Riccati.

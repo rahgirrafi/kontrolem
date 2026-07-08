@@ -22,8 +22,12 @@ that claim is tested against.
 It contains only interfaces and plain structs — no algorithm:
 - `Controller` — the plugin base (`capabilities / synthesize / configure /
   compute / status`).
-- `ControlProblem` + `Regulation` — the capability-typed problem spec (only the
-  setpoint dialect exists so far; `Tracking` / `TaskSpec` are named, not defined).
+- `ControlProblem` + `Regulation` + `Tracking` — the capability-typed problem
+  spec. Two dialects exist (fixed setpoint; time-varying reference); `TaskSpec`
+  is named, not defined.
+- `TrajectorySource` (`trajectory.hpp`) — the time-varying reference seam for
+  `Tracking`: abstract `sample(t, …)` with `ConstantReference` (a setpoint as a
+  degenerate trajectory) and `HarmonicReference`; allocation-free.
 - `Synthesis` — the serializable artifact produced offline by `synthesize`.
 - `State`, `Command`, `Status` — the per-tick data types (Eigen-only).
 
@@ -71,9 +75,11 @@ full lifecycle — proof the interface is coherent and implementable.
   Layer 1  kontrolem_model (dynamics service)
 ```
 
-Note: for this slice the problem-spec types (`ControlProblem`, `Regulation`)
-live *inside* this package for minimality; they are the Layer-2 concept and will
-move to a `kontrolem_problem` package once a second dialect (Tracking) exists.
+Note: the problem-spec types (`ControlProblem`, `Regulation`, `Tracking`,
+`TrajectorySource`) live *inside* this package for now; they are the Layer-2
+concept and are the candidate to extract into a `kontrolem_problem` package —
+now earned (a second dialect, `Tracking`, exists), pending when a third consumer
+makes the split pay off.
 
 ## Intended use
 

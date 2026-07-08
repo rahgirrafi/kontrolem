@@ -28,12 +28,13 @@ kontrolem_controller:
     q_ref: [0.0, 0.0]
     v_ref: [0.0, 0.0]
     safe_action: zero
+    publish_diagnostics: true
 
     # LQR weights. State order is [cart_pos, pole_angle, cart_vel, pole_vel];
     # penalize pole angle most. r_diag is per actuated joint (the cart effort).
     lqr.q_diag: [1.0, 10.0, 1.0, 1.0]
     lqr.r_diag: [0.1]
-    lqr.q_dev_max: 1.0
+    lqr.q_dev_max: 0.5   # Q-weighted trust distance; cart travel no longer trips it
 
     # QP params (used only when control_law: qp).
     qp.task_weight: [1.0, 10.0]

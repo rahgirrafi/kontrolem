@@ -11,15 +11,17 @@
 
 #include <Eigen/Dense>
 
+#include "kontrolem_control/trajectory.hpp"
+
 namespace kontrolem_control
 {
 
-/// Known problem dialects. Only Regulation exists in this slice; Tracking and
-/// TaskSpec are named so the enum is stable, but not yet defined.
+/// Known problem dialects. TaskSpec is named so the enum is stable but not yet
+/// defined (WBC/MPC).
 enum class Dialect
 {
   kRegulation,  ///< drive the state to a fixed setpoint
-  kTracking,    ///< follow a time-varying reference (later)
+  kTracking,    ///< follow a time-varying reference
   kTaskSpec,    ///< weighted task hierarchy + constraints (later, WBC/MPC)
 };
 
@@ -40,6 +42,17 @@ struct Regulation : ControlProblem
   Eigen::VectorXd v_ref;  ///< desired velocity (usually zero)
 
   Dialect kind() const override { return Dialect::kRegulation; }
+};
+
+/// Follow a time-varying reference produced by a TrajectorySource (which the
+/// controller samples at the current time each tick). The source is referenced,
+/// not owned — its lifetime is the caller's responsibility (the runtime owns it
+/// for as long as the problem is active).
+struct Tracking : ControlProblem
+{
+  const TrajectorySource * reference{nullptr};
+
+  Dialect kind() const override { return Dialect::kTracking; }
 };
 
 }  // namespace kontrolem_control

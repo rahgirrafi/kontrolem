@@ -40,16 +40,27 @@ struct Dynamics
 /// Queryable rigid-body model built from a URDF. This slice exposes only what
 /// the LQR / QP interface test needs; rollout, contact Jacobians, floating base
 /// etc. are deliberately absent (see the v2 plan, Part A Layer 1).
+/// Root-joint kind. Fixed base keeps nq == nv (Euclidean). A floating base adds a
+/// free-flyer root: the configuration gains a 7-DoF SE(3) pose (3 translation + 4
+/// quaternion) and the velocity a 6-DoF spatial twist, so nq == nv + 1 and the
+/// configuration lives on a manifold — see integrate().
+enum class BaseType
+{
+  kFixed,
+  kFloating,
+};
+
 class RobotModel
 {
 public:
-  /// Build a fixed-base model from a URDF file. Throws std::runtime_error on
-  /// parse failure.
-  static RobotModel from_urdf_file(const std::string & path);
+  /// Build a model from a URDF file. `base` selects fixed or floating base.
+  /// Throws std::runtime_error on parse failure.
+  static RobotModel from_urdf_file(const std::string & path, BaseType base = BaseType::kFixed);
 
-  /// Build a fixed-base model from a URDF XML string (e.g. the ros2_control
+  /// Build a model from a URDF XML string (e.g. the ros2_control
   /// `robot_description`). Throws std::runtime_error on parse failure.
-  static RobotModel from_urdf_string(const std::string & urdf_xml);
+  static RobotModel from_urdf_string(
+    const std::string & urdf_xml, BaseType base = BaseType::kFixed);
 
   /// Analytic continuous-time linearization about (q, v, tau) via Pinocchio's
   /// computeABADerivatives (not finite differences). Precondition: q.size()==nq,
@@ -98,6 +109,32 @@ public:
   void dynamics(
     Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
     Eigen::MatrixXd & M_out, Eigen::VectorXd & h_out) const;
+
+  /// Center of mass position (world frame) at configuration q. A configuration-
+  /// dependent scalar/vector used to validate the floating-base model against a
+  /// known quantity (plan M3), and the basis of CoM tasks for the WBC.
+  Eigen::Vector3d center_of_mass(const Eigen::VectorXd & q) const;
+
+  /// World-frame position of a named frame (e.g. a foot / contact point) at q.
+  /// Throws std::runtime_error if the frame does not exist.
+  Eigen::Vector3d frame_position(const Eigen::VectorXd & q, const std::string & frame) const;
+
+  /// Translational contact Jacobian (3 x nv) of a named frame, world-aligned:
+  ///   v_world = J · v_generalized.
+  /// This is the map a QP-WBC needs to express foot no-slip / friction-cone
+  /// constraints and contact-force terms Jᵀλ. Throws if the frame is absent.
+  Eigen::MatrixXd contact_jacobian(const Eigen::VectorXd & q, const std::string & frame) const;
+
+  /// Manifold-correct configuration update: q_next = q ⊕ (v · dt). For a fixed
+  /// base this is q + v·dt; for a floating base it integrates the SE(3) root on
+  /// its group (quaternion stays unit), which a naive q + v·dt would corrupt.
+  Eigen::VectorXd integrate(
+    const Eigen::VectorXd & q, const Eigen::VectorXd & v, double dt) const;
+
+  /// Neutral configuration (identity SE(3) root for a floating base, zeros for a
+  /// fixed base). Correct starting point since a zero vector is NOT a valid
+  /// floating-base q (the quaternion would be zero, not unit).
+  Eigen::VectorXd neutral() const;
 
   int nq() const;
   int nv() const;

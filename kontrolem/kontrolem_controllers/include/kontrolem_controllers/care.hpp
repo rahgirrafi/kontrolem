@@ -66,6 +66,31 @@ inline Eigen::MatrixXd lqr_gain(
   return R.inverse() * B.transpose() * solve_care(A, B, Q, R);
 }
 
+/// Stabilizing solution P of the Discrete Algebraic Riccati Equation
+///   P = A^T P A - A^T P B (R + B^T P B)^-1 B^T P A + Q,
+/// by the standard fixed-point iteration (converges for a stabilizable,
+/// detectable discrete pair). Used as the MPC terminal cost so a finite horizon
+/// inherits infinite-horizon (discrete-LQR) stability. `A`, `B` are the
+/// DISCRETE-time matrices.
+inline Eigen::MatrixXd solve_dare(
+  const Eigen::MatrixXd & A, const Eigen::MatrixXd & B, const Eigen::MatrixXd & Q,
+  const Eigen::MatrixXd & R, int max_iter = 2000, double tol = 1e-10)
+{
+  Eigen::MatrixXd P = Q;
+  for (int i = 0; i < max_iter; ++i) {
+    const Eigen::MatrixXd BtP = B.transpose() * P;
+    const Eigen::MatrixXd S = R + BtP * B;                       // m x m
+    const Eigen::MatrixXd K = S.ldlt().solve(BtP * A);           // m x n
+    Eigen::MatrixXd Pn = Q + A.transpose() * P * A - A.transpose() * P * B * K;
+    Pn = 0.5 * (Pn + Pn.transpose());                            // symmetrize
+    if ((Pn - P).norm() <= tol * (1.0 + P.norm())) {
+      return Pn;
+    }
+    P = Pn;
+  }
+  return P;
+}
+
 }  // namespace kontrolem_controllers
 
 #endif  // KONTROLEM_CONTROLLERS__CARE_HPP_

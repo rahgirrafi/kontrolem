@@ -9,15 +9,20 @@ simulator.
 This is the single package that bridges ROS and the ROS-free control core. The
 `KontrolemController` (a `controller_interface::ControllerInterface`):
 
-- reads joint **state interfaces** → assembles a `kontrolem_control::State`,
+- claims joint **state interfaces** per the law's `capabilities()` — position
+  always, velocity **only if** `needs_velocity_state` (an output-feedback law like
+  LQG claims positions only and estimates velocity internally) — and assembles a
+  `kontrolem_control::State`,
+- builds the **problem** from params: a fixed setpoint (`Regulation`) or a moving
+  reference (`Tracking` + a `TrajectorySource`, e.g. `reference_type: harmonic`),
 - calls the hosted law's `compute(state, problem, dt)`,
 - writes the resulting torque to the actuated joints' **command interfaces**,
 - runs a **minimal supervisor**: it trusts the law's `status()` and applies a
   safe action (currently: zero command) when the status is not ok.
 
-Which law runs (LQR or QP task-space) is chosen by the `control_law` parameter,
-so one runtime serves every controller paradigm — the whole point of the v2
-contract.
+Which law runs (LQR / LQG / QP task-space) is chosen by the `control_law`
+parameter, so one runtime serves every controller paradigm — the whole point of
+the v2 contract.
 
 ## Dependencies and build instructions
 

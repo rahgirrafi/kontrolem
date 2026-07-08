@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<!-- M3.3 SPIKE: floating-base robot wired to ros2_control. The point of the spike
+     is to test the plan's "sharpest compromise": ros2_control has no floating-base
+     concept, so the base SE(3) pose + spatial twist are carried as SCALAR state
+     interfaces on a <gpio name="floating_base"> block (pose.* + twist.*), exported
+     by a self-contained floating sim hardware and reassembled controller-side into
+     a manifold-correct State. If this reads as intolerably ugly, the plan says to
+     revisit a middleware-neutral state surface for the legged path. -->
+<robot name="floating_biped">
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="5.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+  </link>
+  <joint name="hip_left" type="revolute">
+    <parent link="base_link"/><child link="thigh_left"/>
+    <origin xyz="0 0.1 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="50" velocity="20" lower="-1.57" upper="1.57"/>
+  </joint>
+  <link name="thigh_left">
+    <inertial><origin xyz="0 0 -0.15" rpy="0 0 0"/><mass value="0.5"/>
+      <inertia ixx="0.004" ixy="0" ixz="0" iyy="0.004" iyz="0" izz="0.0005"/></inertial>
+  </link>
+  <joint name="foot_left_fixed" type="fixed">
+    <parent link="thigh_left"/><child link="foot_left"/><origin xyz="0 0 -0.3" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_left">
+    <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial>
+  </link>
+  <joint name="hip_right" type="revolute">
+    <parent link="base_link"/><child link="thigh_right"/>
+    <origin xyz="0 -0.1 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="50" velocity="20" lower="-1.57" upper="1.57"/>
+  </joint>
+  <link name="thigh_right">
+    <inertial><origin xyz="0 0 -0.15" rpy="0 0 0"/><mass value="0.5"/>
+      <inertia ixx="0.004" ixy="0" ixz="0" iyy="0.004" iyz="0" izz="0.0005"/></inertial>
+  </link>
+  <joint name="foot_right_fixed" type="fixed">
+    <parent link="thigh_right"/><child link="foot_right"/><origin xyz="0 0 -0.3" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_right">
+    <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial>
+  </link>
+
+  <ros2_control name="floating_biped_sim" type="system">
+    <hardware>
+      <plugin>kontrolem_description/FloatingBaseSimSystem</plugin>
+    </hardware>
+
+    <!-- Actuated joints (as usual). -->
+    <joint name="hip_left">
+      <command_interface name="effort"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="hip_right">
+      <command_interface name="effort"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- The non-joint base state, decomposed into scalar interfaces. SE(3) pose
+         (position xyz + unit quaternion xyzw) and spatial twist (linear+angular). -->
+    <gpio name="floating_base">
+      <state_interface name="pose.position.x"/>
+      <state_interface name="pose.position.y"/>
+      <state_interface name="pose.position.z"/>
+      <state_interface name="pose.orientation.x"/>
+      <state_interface name="pose.orientation.y"/>
+      <state_interface name="pose.orientation.z"/>
+      <state_interface name="pose.orientation.w"/>
+      <state_interface name="twist.linear.x"/>
+      <state_interface name="twist.linear.y"/>
+      <state_interface name="twist.linear.z"/>
+      <state_interface name="twist.angular.x"/>
+      <state_interface name="twist.angular.y"/>
+      <state_interface name="twist.angular.z"/>
+    </gpio>
+  </ros2_control>
+</robot>
