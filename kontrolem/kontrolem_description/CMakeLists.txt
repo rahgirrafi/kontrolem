@@ -14,7 +14,9 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(kontrolem_model REQUIRED)
 
-add_library(kontrolem_description SHARED src/cart_pole_sim_system.cpp)
+add_library(kontrolem_description SHARED
+  src/cart_pole_sim_system.cpp
+  src/floating_base_sim_system.cpp)
 target_include_directories(kontrolem_description PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")

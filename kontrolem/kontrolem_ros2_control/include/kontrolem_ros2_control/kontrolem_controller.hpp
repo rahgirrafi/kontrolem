@@ -21,7 +21,9 @@
 #include "controller_interface/controller_interface.hpp"
 #include "kontrolem_control/controller.hpp"
 #include "kontrolem_model/robot_model.hpp"
+#include "kontrolem_msgs/msg/controller_diagnostics.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "realtime_tools/realtime_publisher.h"
 
 namespace kontrolem_ros2_control
 {
@@ -45,8 +47,10 @@ private:
   // Core (ROS-free) objects.
   std::optional<kontrolem_model::RobotModel> model_;
   std::unique_ptr<kontrolem_control::Controller> law_;
-  std::unique_ptr<kontrolem_control::Regulation> problem_;
+  std::unique_ptr<kontrolem_control::ControlProblem> problem_;      // Regulation or Tracking
+  std::unique_ptr<kontrolem_control::TrajectorySource> reference_;  // owned when Tracking
   kontrolem_control::State state_;
+  rclcpp::Time start_time_;  // set on_activate; drives State::t for Tracking
 
   // Config.
   std::vector<std::string> actuated_joints_;
@@ -54,6 +58,15 @@ private:
   std::string pos_interface_{"position"};
   std::string vel_interface_{"velocity"};
   std::string safe_action_{"zero"};
+  bool needs_velocity_{true};  // from the law's capabilities(); if false, claim positions only
+
+  // Telemetry (opt-in, RT-safe): per-tick ControllerDiagnostics on ~/diagnostics.
+  bool publish_diagnostics_{false};
+  std::string control_law_;
+  Eigen::VectorXd qref_buf_;  // reference snapshot for the message
+  using DiagMsg = kontrolem_msgs::msg::ControllerDiagnostics;
+  std::shared_ptr<rclcpp::Publisher<DiagMsg>> diag_pub_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<DiagMsg>> rt_diag_;
 
   // Interface indices resolved by name in on_activate().
   std::vector<std::size_t> pos_idx_;  // per model joint

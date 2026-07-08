@@ -9,4 +9,14 @@
       minimal supervisor acting on the controller's status().
     </description>
   </class>
+  <class name="kontrolem_ros2_control/FloatingStateProbe"
+         type="kontrolem_ros2_control::FloatingStateProbe"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      M3 spike: claims the floating base's scalar &lt;gpio&gt; state interfaces +
+      joint states, reassembles a manifold-correct State, and reports base
+      height / CoM / quaternion norm. Read-only; tests non-joint state through
+      ros2_control.
+    </description>
+  </class>
 </library>

@@ -1,0 +1,35 @@
+# controller_manager config for the M2 tracking-MPC run: MPC follows a moving
+# reference on the cart-pole, using the future reference over its horizon (so it
+# tracks much tighter than feedback-only LQR). robot_description is injected at
+# launch time (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: mpc
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+
+    # Tracking: cart follows 0.3*cos(0.5 t); pole held upright (amp 0).
+    reference_type: harmonic
+    reference.center: [0.0, 0.0]
+    reference.amp: [0.3, 0.0]
+    reference.phase: [0.0, 0.0]
+    reference.omega: 0.5
+
+    mpc.q_diag: [10.0, 10.0, 1.0, 1.0]
+    mpc.r_diag: [0.1]
+    mpc.horizon: 30
+    mpc.dt_mpc: 0.02
+    mpc.tau_max: 50.0

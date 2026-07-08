@@ -8,4 +8,13 @@
       ABA, so the control loop can run end-to-end without Gazebo.
     </description>
   </class>
+  <class name="kontrolem_description/FloatingBaseSimSystem"
+         type="kontrolem_description::FloatingBaseSimSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Floating-base simulation hardware (M3 spike): integrates SE(3) rigid-body
+      dynamics and exports the base pose/twist as scalar state interfaces on a
+      &lt;gpio&gt; block, to test non-joint state through ros2_control.
+    </description>
+  </class>
 </library>

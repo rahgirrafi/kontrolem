@@ -16,6 +16,7 @@ find_package(osqp REQUIRED)
 add_library(kontrolem_controllers SHARED
   src/lqr_controller.cpp
   src/lqg_controller.cpp
+  src/mpc_controller.cpp
   src/qp_solver.cpp
   src/qp_task_space_controller.cpp)
 target_include_directories(kontrolem_controllers PUBLIC
@@ -44,6 +45,24 @@ if(BUILD_TESTING)
   target_compile_definitions(test_lqr_cartpole PRIVATE
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME lqr_cartpole COMMAND test_lqr_cartpole)
+
+  add_executable(test_lqr_tracking test/test_lqr_tracking.cpp)
+  target_link_libraries(test_lqr_tracking kontrolem_controllers)
+  target_compile_definitions(test_lqr_tracking PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME lqr_tracking COMMAND test_lqr_tracking)
+
+  add_executable(test_mpc_cartpole test/test_mpc_cartpole.cpp)
+  target_link_libraries(test_mpc_cartpole kontrolem_controllers)
+  target_compile_definitions(test_mpc_cartpole PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME mpc_cartpole COMMAND test_mpc_cartpole)
+
+  add_executable(test_mpc_tracking test/test_mpc_tracking.cpp)
+  target_link_libraries(test_mpc_tracking kontrolem_controllers)
+  target_compile_definitions(test_mpc_tracking PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME mpc_tracking COMMAND test_mpc_tracking)
 
   add_executable(test_lqg_cartpole test/test_lqg_cartpole.cpp)
   target_link_libraries(test_lqg_cartpole kontrolem_controllers)

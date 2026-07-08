@@ -5,9 +5,14 @@
 
 #include <pinocchio/algorithm/aba.hpp>
 #include <pinocchio/algorithm/aba-derivatives.hpp>
+#include <pinocchio/algorithm/center-of-mass.hpp>
 #include <pinocchio/algorithm/crba.hpp>
+#include <pinocchio/algorithm/frames.hpp>
+#include <pinocchio/algorithm/jacobian.hpp>
+#include <pinocchio/algorithm/joint-configuration.hpp>
 #include <pinocchio/algorithm/rnea.hpp>
 #include <pinocchio/multibody/data.hpp>
+#include <pinocchio/multibody/joint/joint-free-flyer.hpp>
 #include <pinocchio/multibody/model.hpp>
 #include <pinocchio/parsers/urdf.hpp>
 
@@ -36,11 +41,15 @@ void collect_joint_names(
 }
 }  // namespace
 
-RobotModel RobotModel::from_urdf_file(const std::string & path)
+RobotModel RobotModel::from_urdf_file(const std::string & path, BaseType base)
 {
   RobotModel m;
   try {
-    pinocchio::urdf::buildModel(path, m.impl_->model);  // fixed base
+    if (base == BaseType::kFloating) {
+      pinocchio::urdf::buildModel(path, pinocchio::JointModelFreeFlyer(), m.impl_->model);
+    } else {
+      pinocchio::urdf::buildModel(path, m.impl_->model);
+    }
   } catch (const std::exception & e) {
     throw std::runtime_error("RobotModel: failed to parse URDF '" + path + "': " + e.what());
   }
@@ -48,11 +57,16 @@ RobotModel RobotModel::from_urdf_file(const std::string & path)
   return m;
 }
 
-RobotModel RobotModel::from_urdf_string(const std::string & urdf_xml)
+RobotModel RobotModel::from_urdf_string(const std::string & urdf_xml, BaseType base)
 {
   RobotModel m;
   try {
-    pinocchio::urdf::buildModelFromXML(urdf_xml, m.impl_->model);  // fixed base
+    if (base == BaseType::kFloating) {
+      pinocchio::urdf::buildModelFromXML(
+        urdf_xml, pinocchio::JointModelFreeFlyer(), m.impl_->model);
+    } else {
+      pinocchio::urdf::buildModelFromXML(urdf_xml, m.impl_->model);
+    }
   } catch (const std::exception & e) {
     throw std::runtime_error(std::string("RobotModel: failed to parse URDF XML: ") + e.what());
   }
@@ -149,6 +163,52 @@ Linearization RobotModel::linearize(
   lin.B.setZero(2 * nv, nv);
   lin.B.bottomRows(nv) = data.Minv;
   return lin;
+}
+
+Eigen::Vector3d RobotModel::center_of_mass(const Eigen::VectorXd & q) const
+{
+  const auto & model = impl_->model;
+  pinocchio::Data data(model);
+  return pinocchio::centerOfMass(model, data, q);
+}
+
+Eigen::Vector3d RobotModel::frame_position(
+  const Eigen::VectorXd & q, const std::string & frame) const
+{
+  const auto & model = impl_->model;
+  if (!model.existFrame(frame)) {
+    throw std::runtime_error("RobotModel::frame_position: no frame '" + frame + "'");
+  }
+  pinocchio::Data data(model);
+  pinocchio::framesForwardKinematics(model, data, q);
+  return data.oMf[model.getFrameId(frame)].translation();
+}
+
+Eigen::MatrixXd RobotModel::contact_jacobian(
+  const Eigen::VectorXd & q, const std::string & frame) const
+{
+  const auto & model = impl_->model;
+  if (!model.existFrame(frame)) {
+    throw std::runtime_error("RobotModel::contact_jacobian: no frame '" + frame + "'");
+  }
+  pinocchio::Data data(model);
+  const auto fid = model.getFrameId(frame);
+  Eigen::MatrixXd J6 = Eigen::MatrixXd::Zero(6, model.nv);
+  pinocchio::computeFrameJacobian(model, data, q, fid, pinocchio::LOCAL_WORLD_ALIGNED, J6);
+  return J6.topRows(3);  // translational part: v_world = J * v_generalized
+}
+
+Eigen::VectorXd RobotModel::integrate(
+  const Eigen::VectorXd & q, const Eigen::VectorXd & v, double dt) const
+{
+  // pinocchio::integrate applies the group exponential per joint, so the
+  // free-flyer root advances on SE(3) and its quaternion stays unit.
+  return pinocchio::integrate(impl_->model, q, (v * dt).eval());
+}
+
+Eigen::VectorXd RobotModel::neutral() const
+{
+  return pinocchio::neutral(impl_->model);
 }
 
 int RobotModel::nq() const { return impl_->model.nq; }

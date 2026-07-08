@@ -1,0 +1,37 @@
+# controller_manager config for the M1 cart-pole TRACKING run.
+#
+# Same cart-pole, same runtime, same LQR gain law as the balancing demo — but the
+# problem is a Tracking dialect: the cart follows a moving harmonic reference
+# (0.3 * cos(0.5 t)) while the pole is held upright. Demonstrates that ONE
+# controller accepts both Regulation and Tracking. robot_description is injected
+# at launch time (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: lqr
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+
+    # Tracking: cart follows 0.3*cos(0.5 t); pole held upright (amp 0).
+    reference_type: harmonic
+    reference.center: [0.0, 0.0]     # [cart, pole]
+    reference.amp: [0.3, 0.0]
+    reference.phase: [0.0, 0.0]
+    reference.omega: 0.5
+
+    # Weight cart position (index 0) so the cart tracks; keep the pole weighted.
+    lqr.q_diag: [10.0, 10.0, 1.0, 1.0]
+    lqr.r_diag: [0.1]
+    lqr.q_dev_max: 5.0   # the cart roams by design; keep the supervisor from cutting

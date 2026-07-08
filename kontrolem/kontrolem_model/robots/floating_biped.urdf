@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!-- Minimal FLOATING-BASE robot for the M3 model-service slice: a trunk that
+     floats in SE(3) (attached to a Pinocchio free-flyer root) with two legs,
+     each a revolute hip + a foot link whose frame is a contact point. Small and
+     hand-checkable, but structurally the shape of the eventual quadruped:
+     nq = 7 (SE(3) root) + 2 (hips) = 9;  nv = 6 + 2 = 8;  so nq == nv + 1.
+     Inertias are plausible, not tuned — the M3 tests check model consistency
+     (CoM, SE(3) integrate round-trip), not physical fidelity. -->
+<robot name="floating_biped">
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="5.0"/>
+      <inertia ixx="0.1" ixy="0" ixz="0" iyy="0.1" iyz="0" izz="0.1"/>
+    </inertial>
+  </link>
+
+  <!-- ================= left leg ================= -->
+  <joint name="hip_left" type="revolute">
+    <parent link="base_link"/>
+    <child link="thigh_left"/>
+    <origin xyz="0 0.1 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="50" velocity="20" lower="-1.57" upper="1.57"/>
+  </joint>
+  <link name="thigh_left">
+    <inertial>
+      <origin xyz="0 0 -0.15" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.004" ixy="0" ixz="0" iyy="0.004" iyz="0" izz="0.0005"/>
+    </inertial>
+  </link>
+  <joint name="foot_left_fixed" type="fixed">
+    <parent link="thigh_left"/>
+    <child link="foot_left"/>
+    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_left">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+
+  <!-- ================= right leg ================= -->
+  <joint name="hip_right" type="revolute">
+    <parent link="base_link"/>
+    <child link="thigh_right"/>
+    <origin xyz="0 -0.1 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="50" velocity="20" lower="-1.57" upper="1.57"/>
+  </joint>
+  <link name="thigh_right">
+    <inertial>
+      <origin xyz="0 0 -0.15" rpy="0 0 0"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.004" ixy="0" ixz="0" iyy="0.004" iyz="0" izz="0.0005"/>
+    </inertial>
+  </link>
+  <joint name="foot_right_fixed" type="fixed">
+    <parent link="thigh_right"/>
+    <child link="foot_right"/>
+    <origin xyz="0 0 -0.3" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_right">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+</robot>

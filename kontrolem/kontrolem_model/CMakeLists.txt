@@ -43,6 +43,20 @@ if(BUILD_TESTING)
   target_compile_definitions(test_linearize_fd PRIVATE
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/cart_pole.urdf")
   add_test(NAME linearize_fd COMMAND test_linearize_fd)
+
+  # Floating-base model service (M3.1): SE(3) dims, CoM, manifold integrate.
+  add_executable(test_floating_base test/test_floating_base.cpp)
+  target_link_libraries(test_floating_base kontrolem_model)
+  target_compile_definitions(test_floating_base PRIVATE
+    FLOATING_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_biped.urdf")
+  add_test(NAME floating_base COMMAND test_floating_base)
+
+  # Contact Jacobian (M3.2): analytic vs finite-difference of foot world position.
+  add_executable(test_contact_jacobian test/test_contact_jacobian.cpp)
+  target_link_libraries(test_contact_jacobian kontrolem_model)
+  target_compile_definitions(test_contact_jacobian PRIVATE
+    FLOATING_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_biped.urdf")
+  add_test(NAME contact_jacobian COMMAND test_contact_jacobian)
 endif()
 
 ament_package()

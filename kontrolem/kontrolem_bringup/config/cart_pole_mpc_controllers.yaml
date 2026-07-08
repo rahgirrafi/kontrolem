@@ -1,0 +1,34 @@
+# controller_manager config for the M2 cart-pole linear-MPC run.
+#
+# Same cart-pole, same runtime — the control law is constrained receding-horizon
+# MPC: it solves a condensed QP over an N-step horizon each tick and applies the
+# first input, honouring a HARD torque limit inside the optimization (a tight
+# tau_max is set so the constraint is visibly active during the transient).
+# robot_description is injected at launch time (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: mpc
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    q_ref: [0.0, 0.0]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+
+    # MPC design. State order [cart_pos, pole_angle, cart_vel, pole_vel].
+    mpc.q_diag: [1.0, 10.0, 1.0, 1.0]
+    mpc.r_diag: [0.1]
+    mpc.horizon: 30
+    mpc.dt_mpc: 0.02      # 30 * 0.02 = 0.6 s prediction horizon
+    mpc.tau_max: 6.0      # hard input limit enforced by the QP
