@@ -46,6 +46,12 @@ if(BUILD_TESTING)
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME lqr_cartpole COMMAND test_lqr_cartpole)
 
+  add_executable(test_lqr_double_pole test/test_lqr_double_pole.cpp)
+  target_link_libraries(test_lqr_double_pole kontrolem_controllers)
+  target_compile_definitions(test_lqr_double_pole PRIVATE
+    CDP_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_double_pole.urdf")
+  add_test(NAME lqr_double_pole COMMAND test_lqr_double_pole)
+
   add_executable(test_lqr_tracking test/test_lqr_tracking.cpp)
   target_link_libraries(test_lqr_tracking kontrolem_controllers)
   target_compile_definitions(test_lqr_tracking PRIVATE

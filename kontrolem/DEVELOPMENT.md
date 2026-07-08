@@ -423,15 +423,47 @@ Priority order agreed with the user: (1) observability, (2) package hygiene,
   Restored `q_dev_max: 0.5` on the cart-pole demo; **verified e2e: 0 supervisor
   cuts** (was the reason for the `1.0` workaround). All 12 tests still green
   (region flag, allocation + malloc audits included).
-- `[ ]` C4b — **LTV MPC (M2.5)** — deferred: needs new Layer-1 model queries
-  (`rollout` + `linearize_along`) for nonlinear-along-trajectory prediction. A
-  real API-growth step, left as a clear next item.
+- `[~]` C4b — **LTV MPC (M2.5)**:
+  - `[x]` **Model queries `rollout` + `linearize_along`** (Layer 1). `rollout(q0,v0,
+    tau_seq,dt) → Trajectory` (semi-implicit Euler, manifold-correct via
+    `integrate`); `linearize_along(q,v,tau) → {A_k,B_k}` (per-step linearization).
+    Offline queries (allocate); reusable by MPC, trajectory optimization, and the
+    WBC. Test `rollout` (13th test): dims, upright-equilibrium holds, tilt falls,
+    integrator convergence (coarse-vs-fine err 0.027), `linearize_along` matches
+    per-point `linearize` exactly.
+  - `[ ]` **LTV MpcController path** — flagged design tradeoff: re-linearizing
+    along the trajectory each tick means rebuilding the condensed QP per tick, so
+    that path is **not malloc-free** (unlike the LTI MPC). Legitimate (firm-RT),
+    but it changes a framework property, and the payoff on the mildly-nonlinear
+    cart-pole is likely marginal (LTI already tracks/balances well). Surfaced for a
+    decision rather than built unilaterally.
+
+- `[x]` C5 — **hard-benchmark demonstration: cart-DOUBLE-inverted-pendulum**
+  (1 actuator, 2 passive poles, 3 DoF — open-loop max Re **+10.3**, far more
+  unstable than the single pole's +3.97). Proves the framework scales past the
+  2-DoF toy. New `robots/cart_double_pole.urdf` (+ `.ros2_control.urdf`, reuses the
+  generic `CartPoleSimSystem`); bringup config + `cart_double_pole.launch.py`.
+  **LQR** stabilizes it — unit test `lqr_double_pole` (14th test: closed-loop
+  stable + recovers from both poles at 0.1 rad) **and e2e** (both poles→0, cart→
+  centre, 0 cuts). **MPC** stabilizes it too, which surfaced a real improvement:
+  - **Exact (matrix-exponential) discretization in `MpcController`** (Van Loan
+    block trick, `unsupported/Eigen/MatrixFunctions`) replacing Euler
+    `I + A·dt`. The double pendulum's fast unstable modes broke Euler at
+    `dt_mpc=0.02`; exact discretization is accurate at any step. Regression-clean
+    (single-pole MPC tests still pass).
+  - **Finding (documented, not a bug):** LTI *condensed* MPC on a fast-unstable
+    system also needs a **short enough horizon** — a long one makes `A_d^N`
+    explode and ill-conditions the QP (it under-actuates and diverges). The double
+    pole needs ≈0.24 s (N≈12 at dt_mpc=0.02); LQR (exact continuous CARE, infinite
+    horizon) has no such sensitivity. A real, honest limitation of the approach.
 
 **Consolidation phase outcome:** the endorsed priorities are done — observability
 (C1) and the front-door README (C3) landed; the region-metric debt (C4a) is paid;
-package hygiene (C2) and LTV MPC (C4b) are consciously deferred with reasons. The
-fixed-base framework is now materially more production-solid (inspectable, tighter
-supervisor, documented).
+the M2.5 model queries (`rollout`/`linearize_along`) are in; the framework is
+demonstrated on a hard benchmark (C5) with a real MPC discretization improvement.
+Package hygiene (C2) and the LTV MPC *controller* (C4b) are consciously deferred.
+The fixed-base framework is materially more production-solid (inspectable, tighter
+supervisor, exact MPC discretization, documented, proven on cart-double-pole).
 
 - **M4:** QP-WBC (`kontrolem_wbc`) + `kontrolem_go2` + supervisor transitions.
   (Standing + push-recovery only — **no locomotion**, per Part D.)

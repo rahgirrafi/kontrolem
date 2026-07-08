@@ -57,6 +57,13 @@ if(BUILD_TESTING)
   target_compile_definitions(test_contact_jacobian PRIVATE
     FLOATING_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_biped.urdf")
   add_test(NAME contact_jacobian COMMAND test_contact_jacobian)
+
+  # rollout + linearize_along (M2.5 LTV/prediction model queries).
+  add_executable(test_rollout test/test_rollout.cpp)
+  target_link_libraries(test_rollout kontrolem_model)
+  target_compile_definitions(test_rollout PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/cart_pole.urdf")
+  add_test(NAME rollout COMMAND test_rollout)
 endif()
 
 ament_package()

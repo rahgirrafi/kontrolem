@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!-- Cart with a DOUBLE inverted pendulum: the canonical hard underactuated
+     benchmark. One actuator (the cart) must balance TWO serially-hinged passive
+     poles about the upright (all angles 0). 3 DoF, fixed base, nq == nv == 3.
+     Revolute (not continuous) joints keep the config Euclidean. Only cart_joint
+     is actuated; pole1_joint and pole2_joint are passive. Used to show the
+     framework (LQR/MPC) handles a genuinely hard problem, not just the toy. -->
+<robot name="cart_double_pole">
+  <link name="base_link"/>
+
+  <joint name="cart_joint" type="prismatic">
+    <parent link="base_link"/>
+    <child link="cart"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" velocity="100" lower="-10" upper="10"/>
+  </joint>
+  <link name="cart">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.0067" ixy="0" ixz="0" iyy="0.0067" iyz="0" izz="0.0067"/>
+    </inertial>
+  </link>
+
+  <!-- First pole: rod length 0.5, point-ish mass, tip at z=+0.5. Angle 0 = up. -->
+  <joint name="pole1_joint" type="revolute">
+    <parent link="cart"/>
+    <child link="pole1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="0" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+  <link name="pole1">
+    <inertial>
+      <origin xyz="0 0 0.25" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.00208" ixy="0" ixz="0" iyy="0.00208" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+
+  <!-- Second pole: hinged at the tip of pole1 (z=+0.5), same rod. -->
+  <joint name="pole2_joint" type="revolute">
+    <parent link="pole1"/>
+    <child link="pole2"/>
+    <origin xyz="0 0 0.5" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="0" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+  <link name="pole2">
+    <inertial>
+      <origin xyz="0 0 0.25" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.00208" ixy="0" ixz="0" iyy="0.00208" iyz="0" izz="1e-5"/>
+    </inertial>
+  </link>
+</robot>

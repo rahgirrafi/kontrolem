@@ -1,0 +1,27 @@
+# controller_manager config for the cart-DOUBLE-inverted-pendulum (hard
+# benchmark): LQR balances 1 actuator against 2 passive poles. State order is
+# [cart, th1, th2, cart_v, th1_v, th2_v]. robot_description injected at launch.
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: lqr
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    q_ref: [0.0, 0.0, 0.0]
+    v_ref: [0.0, 0.0, 0.0]
+    safe_action: zero
+    publish_diagnostics: true
+
+    # Weight both pole angles heavily; cheap cart control.
+    lqr.q_diag: [1.0, 20.0, 20.0, 1.0, 1.0, 1.0]
+    lqr.r_diag: [0.05]
+    lqr.q_dev_max: 5.0

@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <unsupported/Eigen/MatrixFunctions>
+
 #include "kontrolem_controllers/care.hpp"
 
 namespace kontrolem_controllers
@@ -78,9 +80,16 @@ std::unique_ptr<Synthesis> MpcController::synthesize(
     u_eq(j) = tau_eq(act_v[static_cast<std::size_t>(j)]);
   }
 
-  // Euler discretization of xdot = A x + B u at the MPC step.
-  const Eigen::MatrixXd A_d = Eigen::MatrixXd::Identity(n, n) + lin.A * dt_mpc_;
-  const Eigen::MatrixXd B_d = B_act * dt_mpc_;
+  // EXACT (matrix-exponential) discretization of xdot = A x + B u, robust to
+  // stiff unstable modes where Euler (I + A dt) fails — e.g. the fast modes of a
+  // double inverted pendulum. Van Loan's block trick:
+  //   [[A_d, B_d],[0, I]] = exp([[A, B_act],[0, 0]] * dt).
+  Eigen::MatrixXd blk = Eigen::MatrixXd::Zero(n + m, n + m);
+  blk.topLeftCorner(n, n) = lin.A;
+  blk.topRightCorner(n, m) = B_act;
+  const Eigen::MatrixXd expd = (blk * dt_mpc_).exp();
+  const Eigen::MatrixXd A_d = expd.topLeftCorner(n, n);
+  const Eigen::MatrixXd B_d = expd.topRightCorner(n, m);
 
   // Discrete-LQR terminal cost (recursive feasibility / infinite-horizon tail).
   const Eigen::MatrixXd P_term = solve_dare(A_d, B_d, Q_, R_);

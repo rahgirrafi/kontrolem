@@ -211,6 +211,41 @@ Eigen::VectorXd RobotModel::neutral() const
   return pinocchio::neutral(impl_->model);
 }
 
+RobotModel::Trajectory RobotModel::rollout(
+  const Eigen::VectorXd & q0, const Eigen::VectorXd & v0,
+  const std::vector<Eigen::VectorXd> & tau_seq, double dt) const
+{
+  Trajectory traj;
+  traj.q.reserve(tau_seq.size() + 1);
+  traj.v.reserve(tau_seq.size() + 1);
+  Eigen::VectorXd q = q0, v = v0;
+  traj.q.push_back(q);
+  traj.v.push_back(v);
+  for (const auto & tau : tau_seq) {
+    const Eigen::VectorXd a = aba(q, v, tau);
+    v = v + a * dt;              // semi-implicit Euler
+    q = integrate(q, v, dt);    // manifold-correct
+    traj.q.push_back(q);
+    traj.v.push_back(v);
+  }
+  return traj;
+}
+
+std::vector<Linearization> RobotModel::linearize_along(
+  const std::vector<Eigen::VectorXd> & q, const std::vector<Eigen::VectorXd> & v,
+  const std::vector<Eigen::VectorXd> & tau) const
+{
+  if (q.size() != v.size() || q.size() != tau.size()) {
+    throw std::runtime_error("RobotModel::linearize_along: q, v, tau length mismatch");
+  }
+  std::vector<Linearization> out;
+  out.reserve(q.size());
+  for (std::size_t k = 0; k < q.size(); ++k) {
+    out.push_back(linearize(q[k], v[k], tau[k]));
+  }
+  return out;
+}
+
 int RobotModel::nq() const { return impl_->model.nq; }
 int RobotModel::nv() const { return impl_->model.nv; }
 const std::vector<std::string> & RobotModel::joint_names() const { return impl_->joint_names; }
