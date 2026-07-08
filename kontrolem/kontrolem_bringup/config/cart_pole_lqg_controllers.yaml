@@ -1,0 +1,37 @@
+# controller_manager config for the M1 cart-pole LQG (output-feedback) run.
+#
+# Same cart-pole, same runtime as the LQR demo — but the control law is a dynamic
+# output-feedback compensator: it measures ONLY joint positions and estimates the
+# velocities with an internal Kalman filter. robot_description is injected at
+# launch time (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: lqg
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity   # provided by the sim; LQG ignores it (output feedback)
+
+    q_ref: [0.0, 0.0]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+
+    # LQG design. State order [cart_pos, pole_angle, cart_vel, pole_vel].
+    #   q_diag / r_diag: the control LQR weights (as LQR).
+    #   w_diag: process-noise covariance (more on the velocity states).
+    #   v_diag: measurement-noise covariance (positions well trusted).
+    lqg.q_diag: [1.0, 10.0, 1.0, 1.0]
+    lqg.r_diag: [0.1]
+    lqg.w_diag: [1.0, 1.0, 10.0, 10.0]
+    lqg.v_diag: [0.001, 0.001]
+    lqg.innov_max: 0.5

@@ -1,0 +1,11 @@
+<library path="kontrolem_description">
+  <class name="kontrolem_description/CartPoleSimSystem"
+         type="kontrolem_description::CartPoleSimSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Self-contained ros2_control simulation hardware for fixed-base Euclidean
+      robots. Integrates the URDF's true rigid-body dynamics with kontrolem_model
+      ABA, so the control loop can run end-to-end without Gazebo.
+    </description>
+  </class>
+</library>

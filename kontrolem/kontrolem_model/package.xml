@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_model</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 Layer-1 model service: a Pinocchio-backed rigid-body model
+    queryable for linearization (and later dynamics/Jacobians). ROS-independent
+    core — built by ament_cmake/colcon for uniform tooling, but with NO ROS
+    client-library dependency (no rclcpp / ros2_control / message packages).
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <!-- Build tooling only: ament_cmake is not a ROS runtime dependency. -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>pinocchio</depend>
+
+  <test_depend>ament_cmake_test</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

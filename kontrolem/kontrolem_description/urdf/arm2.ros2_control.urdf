@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!-- 2-DoF fully-actuated planar arm (shoulder + elbow, both revolute about y),
+     the honest end-to-end home for the QP task-space controller: unlike the
+     underactuated cart-pole, every joint has an effort command interface, so
+     inverse-dynamics regulation is well-posed.
+
+     Both links are thin rods of length 1 m, mass 1 kg, moving in the x-z plane
+     under gravity. Angle 0 = link along +x (horizontal), so holding the setpoint
+     requires continuous gravity-compensation torque — exactly what the QP's
+     equality M q̈ + h = Sᵀτ supplies. Reuses CartPoleSimSystem (nq == nv). -->
+<robot name="arm2">
+  <link name="base_link"/>
+
+  <joint name="shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="100" velocity="100" lower="-3.14" upper="3.14"/>
+  </joint>
+
+  <link name="link1">
+    <inertial>
+      <origin xyz="0.5 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.0833" iyz="0" izz="0.0833"/>
+    </inertial>
+  </link>
+
+  <joint name="elbow_joint" type="revolute">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="100" velocity="100" lower="-3.14" upper="3.14"/>
+  </joint>
+
+  <link name="link2">
+    <inertial>
+      <origin xyz="0.5 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.0833" iyz="0" izz="0.0833"/>
+    </inertial>
+  </link>
+
+  <!-- ================= ros2_control wiring ================= -->
+  <ros2_control name="arm2_sim" type="system">
+    <hardware>
+      <plugin>kontrolem_description/CartPoleSimSystem</plugin>
+    </hardware>
+
+    <joint name="shoulder_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position">
+        <param name="initial_value">1.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <joint name="elbow_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position">
+        <param name="initial_value">-1.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>
