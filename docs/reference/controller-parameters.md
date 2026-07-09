@@ -92,6 +92,7 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 | `wbc.w_tau` | double | `1e-4` | Torque regularization weight. |
 | `wbc.mu` | double | `0.7` | Friction coefficient (linearized pyramid). |
 | `wbc.tau_max` | double | `40.0` | Per-joint torque limit. |
+| `wbc.max_iter` | int | `200` | OSQP iteration cap (hard-RT solve-time bound; nominal standing/recovery is ~50). Hitting it yields `ok = false` → supervisor fallback. |
 
 ## Notes
 

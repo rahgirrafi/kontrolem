@@ -86,7 +86,7 @@ void QpTaskSpaceController::configure(
   A_.topLeftCorner(nv_, nv_) = M_;
   l_.head(nv_) = -h_;
   u_.head(nv_) = -h_;
-  qp_.setup(P, A_, qcost_, l_, u_);
+  qp_.setup(P, A_, qcost_, l_, u_, /*eps=*/1e-6, max_iter_);
   status_ = Status{true, tau_max_};
 }
 
@@ -115,6 +115,7 @@ const Command & QpTaskSpaceController::compute(
 
   status_.ok = qp_.solved();
   status_.margin = tau_max_ - command_.tau.cwiseAbs().maxCoeff();  // ~0 when the limit is active
+  status_.iters = qp_.iterations();
   return command_;
 }
 

@@ -20,6 +20,7 @@
 | `margin` | `float64` | The control law's `status().margin` (distance to the trust boundary; meaning is per-law). |
 | `safe_action` | `bool` | `true` if the supervisor overrode the command with the safe action. |
 | `update_us` | `float64` | Wall-clock duration of `update()` this tick, in microseconds. |
+| `solver_iters` | `int32` | QP iterations this tick (`0` for closed-form laws like LQR/LQG). The real-time margin: compare against the law's `max_iter` cap. |
 
 ## Notes
 

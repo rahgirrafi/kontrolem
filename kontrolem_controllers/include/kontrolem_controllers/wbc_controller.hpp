@@ -50,6 +50,7 @@ public:
     double w_tau{1e-4};      ///< torque regularization
     double mu{0.7};          ///< friction coefficient (pyramid)
     double tau_max{40.0};    ///< per-joint torque limit
+    int max_iter{200};       ///< OSQP iteration cap (hard-RT bound; nominal is ~1 order below)
   };
 
   WbcController(

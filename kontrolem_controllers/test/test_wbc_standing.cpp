@@ -73,6 +73,7 @@ int main()
   bool finite = true, ever_infeasible = false, torque_ok = true;
   double max_foot_drift = 0.0, hold_base_move = 0.0, min_margin = 1e9;
   int n_not_ok = 0, n_not_ok_hold = 0;
+  int max_iters_solved = 0;  // nominal (converged) iteration count vs the RT cap
   double first_bad_t = -1.0;
   double t = 0.0;
   const int steps = 1750;  // 3.5 s
@@ -86,6 +87,7 @@ int main()
       if (first_bad_t < 0.0) first_bad_t = t;
     } else {
       min_margin = std::min(min_margin, wbc.status().margin);  // margin only meaningful when solved
+      max_iters_solved = std::max(max_iters_solved, wbc.status().iters);
     }
     if (cmd.tau.cwiseAbs().maxCoeff() > gains.tau_max + 1e-6) torque_ok = false;
 
@@ -125,6 +127,8 @@ int main()
             << "\n";
   std::cout << "not-ok ticks = " << n_not_ok << " (of " << steps << "), during hold = "
             << n_not_ok_hold << ", first at t = " << first_bad_t << "\n";
+  std::cout << "max OSQP iters on solved ticks = " << max_iters_solved << " (cap = "
+            << gains.max_iter << ")\n";
 
   const bool hold_ok = hold_base_move < 3e-3;
   const bool recover_ok = base_pose_err < 5e-2 && base_twist < 5e-2;
@@ -138,9 +142,16 @@ int main()
   // dip is "respected to tolerance"; a REAL cone violation would be O(newtons).
   const bool feas_ok = (n_not_ok_hold == 0) && (n_not_ok <= 5) && (min_margin > -2e-3);
   (void)ever_infeasible;
-  const bool ok = finite && hold_ok && recover_ok && contact_ok && feas_ok && torque_ok;
+  // Hard-RT iteration budget: on every SOLVED tick the QP must converge with real
+  // headroom below the cap (>=2x), so the cap is a genuine safety bound the
+  // Supervisor relies on — not a tight fit that would spuriously trip in nominal
+  // standing/recovery. Ticks that DO hit the cap (the stiff post-push transient)
+  // are counted as not-ok above and bounded by feas_ok.
+  const bool iter_ok = max_iters_solved > 0 && 2 * max_iters_solved <= gains.max_iter;
+  const bool ok =
+    finite && hold_ok && recover_ok && contact_ok && feas_ok && torque_ok && iter_ok;
   std::cout << (ok ? "PASS" : "FAIL") << "  (finite=" << finite << " hold=" << hold_ok
             << " recover=" << recover_ok << " contact=" << contact_ok << " feasible=" << feas_ok
-            << " torque=" << torque_ok << ")\n";
+            << " torque=" << torque_ok << " iter=" << iter_ok << ")\n";
   return ok ? 0 : 1;
 }
