@@ -1,0 +1,69 @@
+site_name: Kontrol'Em v2
+site_description: A robot-agnostic, plugin-based control framework for ROS 2 — "MoveIt for control."
+docs_dir: docs
+site_dir: site
+use_directory_urls: true
+
+theme:
+  name: material
+  features:
+    - navigation.tabs          # top-level tabs = the four Diátaxis types
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - search.highlight
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - Balance a cart-pole: tutorials/first-run-cartpole.md
+      - Stand a quadruped: tutorials/stand-a-quadruped.md
+  - How-to guides:
+      - Switch the control law: how-to/switch-control-law.md
+      - Follow a moving reference: how-to/track-a-moving-reference.md
+      - Tune a controller: how-to/tune-a-controller.md
+      - Read diagnostics: how-to/read-diagnostics.md
+      - Run on your own robot: how-to/run-on-your-robot.md
+      - Configure whole-body control: how-to/configure-whole-body-control.md
+      - Verify an integration: how-to/verify-an-integration.md
+      - Fix cmeel library errors: how-to/fix-cmeel-library-errors.md
+  - Reference:
+      - Controller parameters: reference/controller-parameters.md
+      - Control laws: reference/control-laws.md
+      - Core C++ API: reference/core-api.md
+      - ros2_control interfaces: reference/ros2control-interfaces.md
+      - Demos & launch files: reference/demos.md
+      - ControllerDiagnostics message: reference/diagnostics-message.md
+      - Build & environment: reference/build-and-environment.md
+  - Explanation:
+      - Vision & scope: explanation/vision-and-scope.md
+      - Architecture: explanation/architecture.md
+      - Controller contract & lifecycle: explanation/controller-contract.md
+      - Problem specs & dialects: explanation/problem-specs.md
+      - State & non-joint data: explanation/state-and-non-joint-data.md
+      - Safety & real-time: explanation/safety-and-realtime.md
+      - Design decisions: explanation/design-decisions.md

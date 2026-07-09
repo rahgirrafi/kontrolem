@@ -21,3 +21,5 @@ CITATION.cff
 refactored-skipping-parnas.md
 packages
 commit.txt
+# MkDocs build output
+kontrolem/site/
