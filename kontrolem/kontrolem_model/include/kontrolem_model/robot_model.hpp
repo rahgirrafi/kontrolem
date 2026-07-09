@@ -148,18 +148,29 @@ public:
   /// constraints and contact-force terms Jᵀλ. Throws if the frame is absent.
   Eigen::MatrixXd contact_jacobian(const Eigen::VectorXd & q, const std::string & frame) const;
 
-  /// Real-time stacked translational contact Jacobian (3·nc × nv) for the named
-  /// contact frames, world-aligned, using the caller's Workspace. Row block k is
-  /// the 3×nv Jacobian of feet[k]. Writes into the caller's `J_out` (resized if
-  /// needed). Throws if any frame is absent.
+  /// Pinocchio frame index of a named frame. Resolve once (off the RT path) and
+  /// pass the cached indices to the RT contact queries below, so `compute()`
+  /// never does a per-tick name lookup. Throws if the frame is absent.
+  std::size_t frame_index(const std::string & name) const;
+
+  /// Real-time stacked translational contact Jacobian (3·nc × nv), world-aligned,
+  /// using the caller's Workspace. Row block k is the 3×nv Jacobian of the k-th
+  /// contact. Writes into `J_out` (resized if needed). The frame-index overload
+  /// is the allocation-free RT path; the name overload resolves indices first.
+  void contact_jacobian_stacked(
+    Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::size_t> & frame_ids,
+    Eigen::MatrixXd & J_out) const;
   void contact_jacobian_stacked(
     Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::string> & feet,
     Eigen::MatrixXd & J_out) const;
 
-  /// Real-time stacked contact "drift" γ = d/dt(J)·v (3·nc) — the frame
-  /// classical acceleration at zero joint acceleration. The WBC's no-slip
-  /// contact constraint is J·q̈ = −γ; a contact-constrained simulator uses the
-  /// same term. Writes into the caller's `gamma_out`.
+  /// Real-time stacked contact "drift" γ = d/dt(J)·v (3·nc) — the frame classical
+  /// acceleration at zero joint acceleration. The WBC's no-slip contact constraint
+  /// is J·q̈ = −γ; a contact-constrained simulator uses the same term. Writes into
+  /// `gamma_out`. The frame-index overload is the allocation-free RT path.
+  void contact_drift(
+    Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
+    const std::vector<std::size_t> & frame_ids, Eigen::VectorXd & gamma_out) const;
   void contact_drift(
     Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
     const std::vector<std::string> & feet, Eigen::VectorXd & gamma_out) const;
@@ -195,6 +206,12 @@ public:
   /// pose (not q1 − q0), so it lives in the same tangent space as v and q̈. This
   /// is how a WBC forms a frame-consistent configuration error for its PD task.
   Eigen::VectorXd difference(const Eigen::VectorXd & q0, const Eigen::VectorXd & q1) const;
+
+  /// Real-time, allocation-free difference: writes "q1 ⊖ q0" into the caller's
+  /// preallocated `out` (must be size nv). The RT-path overload a controller uses
+  /// for its per-tick posture error, so compute() stays allocation-free.
+  void difference(
+    const Eigen::VectorXd & q0, const Eigen::VectorXd & q1, Eigen::VectorXd & out) const;
 
   int nq() const;
   int nv() const;

@@ -531,8 +531,19 @@ The flagship. Building it de-risk-first (prove the physics offline before ROS).
     returned `SOLVED_INACCURATE` on 27 transient ticks right after the push (none
     during the static hold); the WBC-appropriate eps=1e-4 cleared all of them. The
     status margin measures the **pyramid** cone actually enforced (not a circular
-    one — an early metric bug). `difference()` in compute() still allocates — noted
-    for the WBC RT-allocation audit (the D4 item, deferred).
+    one — an early metric bug).
+- `[x]` **M4.5 — WBC real-time allocation audit closed (Part-D D4).** `compute()`
+  is now **allocation-free (0 malloc/call)**, verified by extending `test_malloc_audit`
+  to the floating-base WBC path. Three sources found and fixed: (1) `difference()`
+  returned a fresh vector → added an in-place `RobotModel::difference(q0,q1,out)`
+  overload; (2) the **per-tick `getFrameId` name lookup allocates** in this
+  Pinocchio build → added `frame_index()` + frame-**index** overloads of
+  `contact_jacobian_stacked`/`contact_drift`, and the WBC caches `feet_ids_` at
+  configure; (3) `getFrameJacobian`/`getFrameClassicalAcceleration` with
+  `LOCAL_WORLD_ALIGNED` allocate a temporary → compute in `LOCAL` and rotate to
+  world with the frame rotation (allocation-free, numerically validated by
+  `test_contact_dynamics`). All four online/RT controllers (LQR/QP/MPC/WBC) now
+  malloc-free. **15 unit tests + quad e2e green.**
 - `[x]` **M4.4 — ros2_control wiring, e2e GREEN.** The WBC stands the quadruped
   through the full stack, no Gazebo:
   - **`FloatingContactSimSystem`** (kontrolem_description) — the standing plant:

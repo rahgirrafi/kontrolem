@@ -12,12 +12,15 @@
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include <Eigen/Dense>
 
 #include "kontrolem_controllers/lqr_controller.hpp"
 #include "kontrolem_controllers/mpc_controller.hpp"
 #include "kontrolem_controllers/qp_task_space_controller.hpp"
+#include "kontrolem_controllers/wbc_controller.hpp"
 #include "kontrolem_model/robot_model.hpp"
 
 extern "C" {
@@ -100,16 +103,46 @@ int main()
                     /*horizon=*/30, /*dt_mpc=*/0.02, /*tau_max=*/6.0);
   mpc.configure(model, *mpc.synthesize(model, upright), upright);
 
+  // WBC: the floating-base whole-body QP (the flagship RT path). Build the quad
+  // standing configuration and a matching Regulation.
+  const RobotModel quad =
+    RobotModel::from_urdf_file(FLOATING_QUAD_URDF, kontrolem_model::BaseType::kFloating);
+  const std::vector<std::string> feet = {"foot_FL", "foot_FR", "foot_RL", "foot_RR"};
+  std::vector<std::string> actuated;
+  for (const std::string leg : {"FL", "FR", "RL", "RR"}) {
+    actuated.push_back("hipx_" + leg);
+    actuated.push_back("hipy_" + leg);
+    actuated.push_back("knee_" + leg);
+  }
+  Eigen::VectorXd q_stand = quad.neutral();
+  for (const std::string leg : {"FL", "FR", "RL", "RR"}) {
+    q_stand(quad.joint_q_index("hipy_" + leg)) = 0.7;
+    q_stand(quad.joint_q_index("knee_" + leg)) = -1.4;
+  }
+  double min_fz = 1e9;
+  for (const auto & f : feet) min_fz = std::min(min_fz, quad.frame_position(q_stand, f).z());
+  q_stand(2) = -min_fz;
+  Regulation stand;
+  stand.q_ref = q_stand;
+  stand.v_ref = Eigen::VectorXd::Zero(quad.nv());
+  State sq;
+  sq.q = q_stand;
+  sq.v = Eigen::VectorXd::Zero(quad.nv());
+  WbcController wbc(feet, actuated, WbcController::Gains{});
+  wbc.configure(quad, *wbc.synthesize(quad, stand), stand);
+
   const int N = 1000;
   for (int i = 0; i < 20; ++i) {  // warm up past any lazy first-solve init
     lqr.compute(s, upright, 0.001);
     qp.compute(s, upright, 0.001);
     mpc.compute(s, upright, 0.001);
+    wbc.compute(sq, stand, 0.001);
   }
 
   const long lqr_m = count_mallocs(lqr, s, upright, N);
   const long qp_m = count_mallocs(qp, s, upright, N);
   const long mpc_m = count_mallocs(mpc, s, upright, N);
+  const long wbc_m = count_mallocs(wbc, sq, stand, N);
 
   std::cout << "compute() over " << N << " calls (malloc/calloc/realloc count):\n";
   std::cout << "  LqrController          : " << lqr_m << "  (" << (double)lqr_m / N << "/call)\n";
@@ -117,18 +150,23 @@ int main()
             << "/call)  <- includes OSQP's C allocations\n";
   std::cout << "  MpcController          : " << mpc_m << "  (" << (double)mpc_m / N
             << "/call)  <- 30-var condensed QP, same OSQP seam\n";
+  std::cout << "  WbcController          : " << wbc_m << "  (" << (double)wbc_m / N
+            << "/call)  <- floating-base 42-var QP + contact queries\n";
 
-  // Both paths must be malloc-free. QP reaching 0 depends on the control-loop
-  // OSQP config (polish=0, adaptive_rho=0 in qp_solver.cpp): this assertion
-  // guards against re-enabling those (they allocate ~42/tick). NOTE: 0
-  // allocation is necessary but not sufficient for hard-RT — OSQP's iteration
-  // count is still data-dependent, so a hard-RT deployment must also cap
-  // max_iter. That is a separate, later concern.
+  // All paths must be malloc-free. QP/MPC/WBC reaching 0 depends on the
+  // control-loop OSQP config (polish=0, adaptive_rho=0 in qp_solver.cpp) AND, for
+  // the WBC, on caching contact frame indices (a per-tick getFrameId name lookup
+  // allocates) + the in-place difference() overload. This assertion guards against
+  // regressing any of those. NOTE: 0 allocation is necessary but not sufficient
+  // for hard-RT — OSQP's iteration count is still data-dependent, so a hard-RT
+  // deployment must also cap max_iter. That is a separate, later concern.
   const bool lqr_clean = (lqr_m == 0);
   const bool qp_clean = (qp_m == 0);
   const bool mpc_clean = (mpc_m == 0);
-  const bool ok = lqr_clean && qp_clean && mpc_clean;
+  const bool wbc_clean = (wbc_m == 0);
+  const bool ok = lqr_clean && qp_clean && mpc_clean && wbc_clean;
   std::cout << (ok ? "PASS" : "FAIL") << ": LQR malloc-free=" << lqr_clean
-            << " QP malloc-free=" << qp_clean << " MPC malloc-free=" << mpc_clean << "\n";
+            << " QP malloc-free=" << qp_clean << " MPC malloc-free=" << mpc_clean
+            << " WBC malloc-free=" << wbc_clean << "\n";
   return ok ? 0 : 1;
 }

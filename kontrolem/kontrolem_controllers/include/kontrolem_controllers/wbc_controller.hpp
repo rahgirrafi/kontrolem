@@ -74,6 +74,7 @@ private:
   // Resolved at configure().
   const RobotModel * model_ = nullptr;
   std::vector<int> act_v_;              // generalized-velocity row of each actuated joint
+  std::vector<std::size_t> feet_ids_;   // cached contact frame indices (no per-tick lookup)
   int nv_ = 0, nc_ = 0, m_ = 0;         // DoF, #contacts, #actuated
   int nz_ = 0, rows_ = 0;               // QP size
   int off_lambda_ = 0, off_tau_ = 0;    // column offsets in z

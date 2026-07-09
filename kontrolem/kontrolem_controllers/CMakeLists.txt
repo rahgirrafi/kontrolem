@@ -100,7 +100,8 @@ if(BUILD_TESTING)
   add_executable(test_malloc_audit test/test_malloc_audit.cpp)
   target_link_libraries(test_malloc_audit kontrolem_controllers)
   target_compile_definitions(test_malloc_audit PRIVATE
-    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf"
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
   add_test(NAME malloc_audit COMMAND test_malloc_audit)
 endif()
 

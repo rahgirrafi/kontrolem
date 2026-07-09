@@ -107,10 +107,12 @@ struct RobotModel::Workspace::Impl
 {
   pinocchio::Data data;
   Eigen::VectorXd zero;  // preallocated a = 0 argument for rnea
-  Eigen::MatrixXd J6;    // 6 x nv scratch for per-frame Jacobians
+  // 6 x nv scratch for per-frame Jacobians. FIXED 6 rows (matches Pinocchio's
+  // Data::Matrix6x) so getFrameJacobian binds it without a temporary allocation.
+  Eigen::Matrix<double, 6, Eigen::Dynamic> J6;
   explicit Impl(const pinocchio::Model & model)
   : data(model), zero(Eigen::VectorXd::Zero(model.nv)),
-    J6(Eigen::MatrixXd::Zero(6, model.nv))
+    J6(Eigen::Matrix<double, 6, Eigen::Dynamic>::Zero(6, model.nv))
   {
   }
 };
@@ -201,37 +203,57 @@ Eigen::MatrixXd RobotModel::contact_jacobian(
   return J6.topRows(3);  // translational part: v_world = J * v_generalized
 }
 
+std::size_t RobotModel::frame_index(const std::string & name) const
+{
+  if (!impl_->model.existFrame(name)) {
+    throw std::runtime_error("RobotModel::frame_index: no frame '" + name + "'");
+  }
+  return impl_->model.getFrameId(name);
+}
+
 void RobotModel::contact_jacobian_stacked(
-  Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::string> & feet,
+  Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::size_t> & frame_ids,
   Eigen::MatrixXd & J_out) const
 {
   const auto & model = impl_->model;
   auto & data = ws.impl_->data;
   const int nv = model.nv;
-  const int nc = static_cast<int>(feet.size());
+  const int nc = static_cast<int>(frame_ids.size());
   if (J_out.rows() != 3 * nc || J_out.cols() != nv) {
     J_out.resize(3 * nc, nv);
   }
   pinocchio::computeJointJacobians(model, data, q);  // fills data.J once
   pinocchio::updateFramePlacements(model, data);
   for (int k = 0; k < nc; ++k) {
-    if (!model.existFrame(feet[k])) {
-      throw std::runtime_error("contact_jacobian_stacked: no frame '" + feet[k] + "'");
-    }
-    const auto fid = model.getFrameId(feet[k]);
+    const auto fid = frame_ids[static_cast<std::size_t>(k)];
+    // Compute in the frame-LOCAL basis and rotate the translational rows to world
+    // with the frame rotation — allocation-free (the LOCAL_WORLD_ALIGNED variant
+    // allocates a temporary internally, and a per-tick name lookup would too).
     ws.impl_->J6.setZero();
-    pinocchio::getFrameJacobian(model, data, fid, pinocchio::LOCAL_WORLD_ALIGNED, ws.impl_->J6);
-    J_out.middleRows(3 * k, 3) = ws.impl_->J6.topRows(3);  // translational block
+    pinocchio::getFrameJacobian(model, data, fid, pinocchio::LOCAL, ws.impl_->J6);
+    J_out.middleRows(3 * k, 3).noalias() = data.oMf[fid].rotation() * ws.impl_->J6.topRows(3);
   }
+}
+
+void RobotModel::contact_jacobian_stacked(
+  Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::string> & feet,
+  Eigen::MatrixXd & J_out) const
+{
+  std::vector<std::size_t> ids;
+  ids.reserve(feet.size());
+  for (const auto & f : feet) {
+    ids.push_back(frame_index(f));
+  }
+  contact_jacobian_stacked(ws, q, ids, J_out);
 }
 
 void RobotModel::contact_drift(
   Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
-  const std::vector<std::string> & feet, Eigen::VectorXd & gamma_out) const
+  const std::vector<std::size_t> & frame_ids, Eigen::VectorXd & gamma_out) const
 {
   const auto & model = impl_->model;
   auto & data = ws.impl_->data;
-  const int nc = static_cast<int>(feet.size());
+  const int nc = static_cast<int>(frame_ids.size());
   if (gamma_out.size() != 3 * nc) {
     gamma_out.resize(3 * nc);
   }
@@ -239,14 +261,22 @@ void RobotModel::contact_drift(
   pinocchio::forwardKinematics(model, data, q, v, ws.impl_->zero);
   pinocchio::updateFramePlacements(model, data);
   for (int k = 0; k < nc; ++k) {
-    if (!model.existFrame(feet[k])) {
-      throw std::runtime_error("contact_drift: no frame '" + feet[k] + "'");
-    }
-    const auto fid = model.getFrameId(feet[k]);
-    const auto acc = pinocchio::getFrameClassicalAcceleration(
-      model, data, fid, pinocchio::LOCAL_WORLD_ALIGNED);
-    gamma_out.segment(3 * k, 3) = acc.linear();
+    const auto fid = frame_ids[static_cast<std::size_t>(k)];
+    const auto acc = pinocchio::getFrameClassicalAcceleration(model, data, fid, pinocchio::LOCAL);
+    gamma_out.segment(3 * k, 3).noalias() = data.oMf[fid].rotation() * acc.linear();
   }
+}
+
+void RobotModel::contact_drift(
+  Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
+  const std::vector<std::string> & feet, Eigen::VectorXd & gamma_out) const
+{
+  std::vector<std::size_t> ids;
+  ids.reserve(feet.size());
+  for (const auto & f : feet) {
+    ids.push_back(frame_index(f));
+  }
+  contact_drift(ws, q, v, ids, gamma_out);
 }
 
 Eigen::VectorXd RobotModel::contact_forward_dynamics(
@@ -320,6 +350,13 @@ Eigen::VectorXd RobotModel::difference(
 {
   // Tangent d with integrate(q0, d) == q1; SE(3) log on the free-flyer root.
   return pinocchio::difference(impl_->model, q0, q1);
+}
+
+void RobotModel::difference(
+  const Eigen::VectorXd & q0, const Eigen::VectorXd & q1, Eigen::VectorXd & out) const
+{
+  // Write-into-buffer form (no return-value allocation): the RT overload.
+  pinocchio::difference(impl_->model, q0, q1, out);
 }
 
 RobotModel::Trajectory RobotModel::rollout(
