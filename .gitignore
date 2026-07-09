@@ -12,6 +12,7 @@ install/
 log/
 
 
+site/
 paper/
 
 RESPONSE_VIZ_PLAN.md
@@ -22,5 +23,5 @@ refactored-skipping-parnas.md
 packages
 commit.txt
 # MkDocs build output
-kontrolem/site/
+
 DEVELOPMENT.md
