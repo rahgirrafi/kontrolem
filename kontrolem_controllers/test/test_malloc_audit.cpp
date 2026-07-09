@@ -157,9 +157,10 @@ int main()
   // control-loop OSQP config (polish=0, adaptive_rho=0 in qp_solver.cpp) AND, for
   // the WBC, on caching contact frame indices (a per-tick getFrameId name lookup
   // allocates) + the in-place difference() overload. This assertion guards against
-  // regressing any of those. NOTE: 0 allocation is necessary but not sufficient
-  // for hard-RT — OSQP's iteration count is still data-dependent, so a hard-RT
-  // deployment must also cap max_iter. That is a separate, later concern.
+  // regressing any of those. 0 allocation is necessary but not sufficient for
+  // hard-RT — OSQP's iteration count is also data-dependent, so each QP path caps
+  // max_iter (WBC/QP/MPC in their setup() calls) to bound per-tick solve time; the
+  // nominal-vs-cap headroom is asserted in the per-controller closed-loop tests.
   const bool lqr_clean = (lqr_m == 0);
   const bool qp_clean = (qp_m == 0);
   const bool mpc_clean = (mpc_m == 0);

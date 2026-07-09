@@ -93,6 +93,7 @@ std::unique_ptr<kc::Controller> make_law(
     g.w_tau = node.get_parameter("wbc.w_tau").as_double();
     g.mu = node.get_parameter("wbc.mu").as_double();
     g.tau_max = node.get_parameter("wbc.tau_max").as_double();
+    g.max_iter = static_cast<int>(node.get_parameter("wbc.max_iter").as_int());
     const auto feet = node.get_parameter("contact_frames").as_string_array();
     return std::make_unique<kctl::WbcController>(feet, actuated, g);
   }
@@ -153,6 +154,7 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<double>("wbc.w_tau", 1e-4);
     auto_declare<double>("wbc.mu", 0.7);
     auto_declare<double>("wbc.tau_max", 40.0);
+    auto_declare<int>("wbc.max_iter", 200);  // OSQP iteration cap (hard-RT bound)
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "on_init failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -457,6 +459,7 @@ controller_interface::return_type KontrolemController::update(
     m.margin = st.margin;
     m.safe_action = !st.ok;
     m.update_us = us;
+    m.solver_iters = st.iters;
     rt_diag_->unlockAndPublish();
   }
   return controller_interface::return_type::OK;

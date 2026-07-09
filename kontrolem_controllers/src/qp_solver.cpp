@@ -24,6 +24,7 @@ struct QpSolver::Impl
   OSQPWorkspace * work = nullptr;
   Eigen::VectorXd x;
   bool solved = false;
+  int iters = 0;
 
   ~Impl()
   {
@@ -82,7 +83,7 @@ QpSolver::~QpSolver() = default;
 
 void QpSolver::setup(
   const Eigen::MatrixXd & P, const Eigen::MatrixXd & A, const Eigen::VectorXd & q,
-  const Eigen::VectorXd & l, const Eigen::VectorXd & u, double eps)
+  const Eigen::VectorXd & l, const Eigen::VectorXd & u, double eps, int max_iter)
 {
   auto & im = *impl_;
   im.nz = static_cast<int>(P.rows());
@@ -118,6 +119,10 @@ void QpSolver::setup(
   // fixed rho (adaptive rho refactorizes the KKT) -> far less per-tick malloc.
   settings.polish = 0;
   settings.adaptive_rho = 0;
+  // Hard bound on ADMM iterations. With polish/adaptive-rho off each iteration
+  // costs the same, so this bounds per-tick solve time; hitting it yields
+  // OSQP_MAX_ITER_REACHED (solved() == false) and a Supervisor fallback.
+  settings.max_iter = static_cast<c_int>(max_iter);
 
   const c_int ret = osqp_setup(&im.work, &data, &settings);
   if (ret != 0 || im.work == nullptr) {
@@ -143,6 +148,7 @@ const Eigen::VectorXd & QpSolver::solve(
   osqp_update_bounds(im.work, im.lv.data(), im.uv.data());
   osqp_solve(im.work);
   im.solved = (im.work->info->status_val == OSQP_SOLVED);
+  im.iters = static_cast<int>(im.work->info->iter);
   for (int i = 0; i < im.nz; ++i) {
     im.x[i] = im.work->solution->x[i];
   }
@@ -150,5 +156,7 @@ const Eigen::VectorXd & QpSolver::solve(
 }
 
 bool QpSolver::solved() const { return impl_->solved; }
+
+int QpSolver::iterations() const { return impl_->iters; }
 
 }  // namespace kontrolem_controllers

@@ -59,13 +59,18 @@ int main()
   const Status s2 = qp.status();
   std::cout << "hard:   tau=" << tau2.transpose() << "  solved=" << s2.ok
             << " margin=" << s2.margin << "\n";
+  std::cout << "OSQP iters: gentle=" << s1.iters << " hard=" << s2.iters
+            << " (cap = 400)\n";
 
   const bool solved = s1.ok && s2.ok;
   const bool u1_ok = tau1.allFinite() && std::abs(tau1[0]) <= tau_max + 1e-3;
   const bool limit_active = std::abs(tau2[0]) >= tau_max - 5e-3;  // clamped at the bound
+  // Hard-RT budget: converge with >=2x headroom below the 400-iter cap, so the
+  // cap is a safety bound, not a tight fit (see qp_solver.hpp / max_iter).
+  const bool iter_ok = s1.iters > 0 && s2.iters > 0 && s1.iters <= 200 && s2.iters <= 200;
 
-  const bool ok = solved && u1_ok && limit_active;
+  const bool ok = solved && u1_ok && limit_active && iter_ok;
   std::cout << (ok ? "PASS" : "FAIL") << "  (solved=" << solved << " u1_ok=" << u1_ok
-            << " limit_active=" << limit_active << ")\n";
+            << " limit_active=" << limit_active << " iter_ok=" << iter_ok << ")\n";
   return ok ? 0 : 1;
 }

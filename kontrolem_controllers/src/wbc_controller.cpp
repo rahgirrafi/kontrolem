@@ -125,7 +125,7 @@ void WbcController::configure(
   A_.block(row_con_, 0, nl, nv_) = J_;
   l_.segment(row_dyn_, nv_) = -h_;  u_.segment(row_dyn_, nv_) = -h_;
   l_.segment(row_con_, nl) = -gamma_;  u_.segment(row_con_, nl) = -gamma_;
-  qp_.setup(P, A_, qcost_, l_, u_, /*eps=*/1e-4);  // WBC scale: newtons, not 1e-6
+  qp_.setup(P, A_, qcost_, l_, u_, /*eps=*/1e-4, g_.max_iter);  // WBC scale: newtons, not 1e-6
   status_ = Status{true, 0.0};
 }
 
@@ -168,6 +168,7 @@ const Command & WbcController::compute(
     min_margin = std::min(min_margin, g_.mu * lz - std::max(std::abs(lx), std::abs(ly)));
   }
   status_.margin = status_.ok ? min_margin : -1.0;
+  status_.iters = qp_.iterations();
   return command_;
 }
 

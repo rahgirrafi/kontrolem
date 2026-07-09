@@ -164,7 +164,7 @@ void MpcController::configure(
   command_.tau.setZero(m_);
 
   qp_ = std::make_unique<QpSolver>();
-  qp_->setup(s.H, A_qp_, qbuf_, l_, u_);
+  qp_->setup(s.H, A_qp_, qbuf_, l_, u_, /*eps=*/1e-4, max_iter_);
   status_ = Status{true, 0.0};
 }
 
@@ -212,6 +212,7 @@ const Command & MpcController::compute(
 
   status_.ok = qp_->solved();
   status_.margin = status_.ok ? 1.0 : -1.0;
+  status_.iters = qp_->iterations();
   return command_;
 }
 

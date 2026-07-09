@@ -64,6 +64,12 @@ private:
   Eigen::MatrixXd Q_, R_;
   int horizon_;
   double dt_mpc_, tau_max_;
+  // OSQP iteration cap (hard-RT bound). The condensed 30-step QP genuinely needs
+  // ~850 iters to hit eps=1e-6 under the fixed-rho/no-polish config chosen for
+  // allocation-freedom (adaptive rho would converge faster but reallocates); cap
+  // set ~2x above that true converged count so it bounds worst-case solve time
+  // without tripping in nominal operation.
+  int max_iter_{2000};
 
   // Loaded at configure().
   Eigen::MatrixXd G_, M_ref_;  // Nm x 2nv, Nm x N*2nv

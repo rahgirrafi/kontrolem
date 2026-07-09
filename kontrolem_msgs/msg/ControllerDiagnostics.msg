@@ -21,3 +21,4 @@ float64 margin            # status().margin (distance to the trust boundary)
 bool safe_action          # true if the supervisor overrode with the safe action
 
 float64 update_us         # wall-clock duration of update() this tick, microseconds
+int32 solver_iters        # QP iterations this tick (0 for closed-form laws); RT margin vs the max_iter cap

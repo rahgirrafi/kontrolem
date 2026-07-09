@@ -48,6 +48,7 @@ private:
   std::vector<std::string> actuated_;
   Eigen::VectorXd W_;  // nv task weights
   double kp_, kd_, tau_max_, tau_reg_;
+  int max_iter_{400};  // OSQP iteration cap (hard-RT bound; nominal <=175 at eps=1e-6)
 
   // Resolved at configure().
   const RobotModel * model_ = nullptr;  // retained handle for per-tick queries

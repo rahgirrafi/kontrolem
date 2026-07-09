@@ -37,6 +37,7 @@ struct Status
 {
   bool ok{true};
   double margin{0.0};  ///< >= 0 means "trustworthy"; each paradigm defines the metric
+  int iters{0};        ///< solver iterations this tick (QP paths); 0 for closed-form laws
 };
 
 }  // namespace kontrolem_control
