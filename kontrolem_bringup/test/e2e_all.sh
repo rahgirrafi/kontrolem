@@ -28,6 +28,11 @@ done
 printf '  %-32s %-16s ' "quad_push.launch.py" "push-recovery"
 if bash "$HERE/e2e_push.sh" | tail -1; then :; else fails=$((fails+1)); fi
 
+# Multi-controller switch: LQR -> MPC on a human command, bumpless (custom metric:
+# the active law flips while the pole stays balanced), so it uses e2e_switch.sh.
+printf '  %-32s %-16s ' "cart_pole_switch.launch.py" "ctrl-switch"
+if bash "$HERE/e2e_switch.sh" | tail -1; then :; else fails=$((fails+1)); fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "E2E SMOKE: ALL PASS"; exit 0
 else echo "E2E SMOKE: $fails FAILED"; exit 1; fi

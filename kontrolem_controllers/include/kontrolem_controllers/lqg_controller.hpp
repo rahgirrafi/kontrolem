@@ -55,8 +55,25 @@ public:
   const Command & compute(const State & state, const ControlProblem & problem, double dt) override;
   const Status & status() const override { return status_; }
 
+  /// Bumpless activation (Supervisor hook): seed the observer from the current
+  /// state so the compensator resumes already-converged instead of from a stale
+  /// estimate. Delegates to seed_from_state().
+  void on_activate(const State & state, const ControlProblem & problem) override
+  {
+    seed_from_state(state, problem);
+  }
+
   /// Diagnostics/tests: the current observer estimate (deviation coords).
   const Eigen::VectorXd & estimate() const { return xhat_; }
+
+  /// Bumpless activation. Seed the internal observer estimate from a known full
+  /// state (deviation coords [q - q_ref; v - v_ref]) so the compensator starts
+  /// ALREADY-CONVERGED when a Supervisor hands it control mid-run — instead of
+  /// from xhat = 0, which injects an observer startup transient (and a command
+  /// jump) whenever the plant isn't at the operating point at the switch instant.
+  /// A stateless law (LQR/QP/MPC) needs no analogue; this is the state-carrying
+  /// controller's half of a heterogeneous bumpless transfer.
+  void seed_from_state(const State & state, const ControlProblem & problem);
 
 private:
   // Design inputs (constructor).

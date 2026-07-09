@@ -14,7 +14,9 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `control_law` | string | `lqr` | Paradigm: `lqr` \| `lqg` \| `mpc` \| `qp` \| `wbc`. |
+| `control_law` | string | `lqr` | Paradigm (single-controller mode): `lqr` \| `lqg` \| `mpc` \| `qp` \| `wbc`. Ignored if `control_laws` is set. |
+| `control_laws` | string[] | `[]` | Multi-controller mode: laws the Supervisor hosts (first is initially active). Non-empty enables live switching over `~/switch_controller`. |
+| `switch_blend_ticks` | int | `20` | Command-blend length (ticks) at a switch; larger = gentler handoff. `1` = hard switch. |
 | `actuated_joints` | string[] | `[]` (required) | Joints the controller commands, in command order. |
 | `robot_description` | string | `""` | URDF XML. Injected by the launch file; do not put in YAML. |
 | `command_interface` | string | `effort` | ros2_control command interface written to the actuated joints. |

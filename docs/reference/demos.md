@@ -11,9 +11,21 @@
 | `cart_pole_mpc_tracking.launch.py` | cart-pole | `mpc` (Tracking) | `cart_pole_mpc_tracking_controllers.yaml` | MPC tracks the moving reference using the future horizon (tighter than LQR). |
 | `cart_double_pole.launch.py` | cart + double pole | `lqr` | `cart_double_pole_controllers.yaml` | Hard 3-DoF benchmark: one actuator, two passive poles (open-loop very unstable). |
 | `arm2.launch.py` | 2-DoF arm | `qp` | `arm2_controllers.yaml` | Online inverse-dynamics QP regulating a fully-actuated arm with an active torque limit. |
+| `cart_pole_switch.launch.py` | cart-pole | `lqr`+`mpc` | `cart_pole_switch_controllers.yaml` | **Multi-controller Supervisor:** one runtime hosts LQR and MPC; a human switches between them live and bumplessly (see below). |
 | `quad_stand.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Whole-body QP stands a floating-base quadruped; base + contacts via `<gpio>`. |
 | `quad_push.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Same WBC standing, but the sim delivers a scheduled external base push (~2 s in); the WBC catches it and returns the base to nominal. |
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
+
+## Switching controllers live (multi-controller Supervisor)
+
+When a demo sets `control_laws` (a list) instead of `control_law`, one `KontrolemController` hosts several laws behind the **Supervisor** and drives the first. Command a switch by publishing the target law name:
+
+```bash
+ros2 topic pub -1 /kontrolem_controller/switch_controller std_msgs/msg/String "{data: mpc}"
+ros2 topic echo /kontrolem_controller/diagnostics   # the control_law field flips to the new law
+```
+
+The handoff is **bumpless**: the incoming law is seeded from the current state (`Controller::on_activate`) and the command is blended from the outgoing to the incoming law over `switch_blend_ticks`. Switching is **manual only** for now (a human command); automatic, health-driven switching is a later layer. See [Explanation → Design decisions](../explanation/design-decisions.md) for the spike that established what a safe handoff requires.
 
 ## Shared launch body
 
