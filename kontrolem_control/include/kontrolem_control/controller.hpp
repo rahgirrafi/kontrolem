@@ -71,6 +71,15 @@ public:
 
   /// Trust / health of the most recent compute(), for the Supervisor.
   virtual const Status & status() const = 0;
+
+  /// Called by the Supervisor at the instant this controller becomes active after
+  /// a switch, with the current world state. A controller that carries internal
+  /// state (e.g. LQG's observer estimate) uses it to initialize that state so it
+  /// activates ALREADY-CONVERGED — a bumpless handoff (the spike measured this
+  /// cutting an LQG reactivation bump from 7.8 N to 0.33 N). Default: no-op, which
+  /// is correct for a stateless law (LQR / QP / MPC) that reads the full state
+  /// each tick and has nothing to seed.
+  virtual void on_activate(const State & /*state*/, const ControlProblem & /*problem*/) {}
 };
 
 /// Wiring-time capability check: the runtime calls this once, before

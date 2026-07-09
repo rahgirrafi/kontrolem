@@ -91,6 +91,23 @@ if(BUILD_TESTING)
     FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
   add_test(NAME wbc_standing COMMAND test_wbc_standing)
 
+  # Heterogeneous bumpless-transfer spike (Part D D1/D4): switch LQG <-> MPC at
+  # runtime and measure the command discontinuity; naive (stale observer) vs
+  # bumpless (observer seeded from state).
+  add_executable(test_switching_spike test/test_switching_spike.cpp)
+  target_link_libraries(test_switching_spike kontrolem_controllers)
+  target_compile_definitions(test_switching_spike PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME switching_spike COMMAND test_switching_spike)
+
+  # Multi-controller Supervisor: manual LQG<->MPC handoff with bumpless activation
+  # + command blend; the runtime meta-controller, proven off-ROS.
+  add_executable(test_supervisor test/test_supervisor.cpp)
+  target_link_libraries(test_supervisor kontrolem_controllers)
+  target_compile_definitions(test_supervisor PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME supervisor COMMAND test_supervisor)
+
   add_executable(test_allocation test/test_allocation.cpp)
   target_link_libraries(test_allocation kontrolem_controllers)
   target_compile_definitions(test_allocation PRIVATE

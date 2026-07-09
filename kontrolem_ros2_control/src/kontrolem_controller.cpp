@@ -105,6 +105,8 @@ CallbackReturn KontrolemController::on_init()
 {
   try {
     auto_declare<std::string>("control_law", "lqr");
+    auto_declare<std::vector<std::string>>("control_laws", {});  // non-empty -> multi-controller
+    auto_declare<int>("switch_blend_ticks", 20);                 // command blend length at a switch
     auto_declare<std::vector<std::string>>("actuated_joints", {});
     auto_declare<std::string>("robot_description", "");
     auto_declare<std::string>("command_interface", "effort");
@@ -241,17 +243,51 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
     }
     }  // end fixed-base problem build
 
-    const auto law = node.get_parameter("control_law").as_string();
-    law_ = make_law(node, law, actuated_joints_, *model_);
-    if (!kc::accepts(*law_, *problem_)) {
-      RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept problem dialect %d",
-                   law.c_str(), static_cast<int>(problem_->kind()));
-      return CallbackReturn::ERROR;
+    const auto laws_param = node.get_parameter("control_laws").as_string_array();
+    multi_ = !laws_param.empty();
+    if (multi_) {
+      // Host every named law behind the Supervisor; the first is initially active.
+      const int blend = static_cast<int>(node.get_parameter("switch_blend_ticks").as_int());
+      supervisor_ = std::make_unique<kc::Supervisor>(blend);
+      needs_velocity_ = false;  // claim the UNION of the hosted laws' needs (can't renegotiate)
+      for (const auto & lname : laws_param) {
+        auto l = make_law(node, lname, actuated_joints_, *model_);
+        if (!kc::accepts(*l, *problem_)) {
+          RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept problem dialect %d",
+                       lname.c_str(), static_cast<int>(problem_->kind()));
+          return CallbackReturn::ERROR;
+        }
+        auto synth = l->synthesize(*model_, *problem_);
+        l->configure(*model_, *synth, *problem_);
+        needs_velocity_ = needs_velocity_ || l->capabilities().needs_velocity_state;
+        supervisor_->add(lname, l.get());
+        laws_.push_back(std::move(l));
+      }
+      supervisor_->set_active(laws_param.front());
+      control_law_ = laws_param.front();
+
+      // Manual switch command: publish the target law name to ~/switch_controller.
+      switch_sub_ = node.create_subscription<std_msgs::msg::String>(
+        "~/switch_controller", rclcpp::SystemDefaultsQoS(),
+        [this](const std_msgs::msg::String::SharedPtr msg) {
+          std::lock_guard<std::mutex> lk(switch_mtx_);
+          switch_request_ = msg->data;
+        });
+      RCLCPP_INFO(node.get_logger(), "multi-controller: hosting %zu laws, active '%s' (blend=%d)",
+                  laws_param.size(), control_law_.c_str(), blend);
+    } else {
+      const auto law = node.get_parameter("control_law").as_string();
+      law_ = make_law(node, law, actuated_joints_, *model_);
+      if (!kc::accepts(*law_, *problem_)) {
+        RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept problem dialect %d",
+                     law.c_str(), static_cast<int>(problem_->kind()));
+        return CallbackReturn::ERROR;
+      }
+      auto synth = law_->synthesize(*model_, *problem_);
+      law_->configure(*model_, *synth, *problem_);
+      needs_velocity_ = law_->capabilities().needs_velocity_state;
+      control_law_ = law;
     }
-    auto synth = law_->synthesize(*model_, *problem_);
-    law_->configure(*model_, *synth, *problem_);
-    needs_velocity_ = law_->capabilities().needs_velocity_state;
-    control_law_ = law;
 
     // Opt-in telemetry: an RT-safe publisher on ~/diagnostics.
     publish_diagnostics_ = node.get_parameter("publish_diagnostics").as_bool();
@@ -266,7 +302,7 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
     RCLCPP_INFO(
       node.get_logger(),
       "configured control_law='%s' on %d-DoF model, %zu actuated (needs_velocity=%s)",
-      law.c_str(), nv, actuated_joints_.size(), needs_velocity_ ? "true" : "false");
+      control_law_.c_str(), nv, actuated_joints_.size(), needs_velocity_ ? "true" : "false");
   } catch (const std::exception & e) {
     RCLCPP_ERROR(node.get_logger(), "on_configure failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -418,8 +454,28 @@ controller_interface::return_type KontrolemController::update(
   }
   state_.t = (time - start_time_).seconds();  // reference clock for Tracking
 
-  const auto & u = law_->compute(state_, *problem_, period.seconds());
-  const auto & st = law_->status();
+  const kc::Command * u_ptr;
+  const kc::Status * st_ptr;
+  if (multi_) {
+    // Drain a pending switch command (best-effort trylock; the RT loop never
+    // blocks on the topic thread). request_switch() only sets a flag the
+    // Supervisor acts on inside compute().
+    {
+      std::unique_lock<std::mutex> lk(switch_mtx_, std::try_to_lock);
+      if (lk.owns_lock() && !switch_request_.empty()) {
+        supervisor_->request_switch(switch_request_);
+        switch_request_.clear();
+      }
+    }
+    u_ptr = &supervisor_->compute(state_, *problem_, period.seconds());
+    st_ptr = &supervisor_->status();
+    control_law_ = supervisor_->active_name();  // short name -> SSO, no heap in the loop
+  } else {
+    u_ptr = &law_->compute(state_, *problem_, period.seconds());
+    st_ptr = &law_->status();
+  }
+  const auto & u = *u_ptr;
+  const auto & st = *st_ptr;
 
   // Minimal Supervisor: trust status(); on a violation apply the safe action.
   if (st.ok) {

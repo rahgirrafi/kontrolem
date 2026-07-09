@@ -13,6 +13,7 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(realtime_tools REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(kontrolem_msgs REQUIRED)
 find_package(kontrolem_control REQUIRED)
 find_package(kontrolem_model REQUIRED)
@@ -32,7 +33,7 @@ target_link_libraries(kontrolem_ros2_control PUBLIC
   kontrolem_controllers::kontrolem_controllers)
 ament_target_dependencies(kontrolem_ros2_control PUBLIC
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
-  realtime_tools kontrolem_msgs)
+  realtime_tools std_msgs kontrolem_msgs)
 
 # Register as a ros2_control controller plugin.
 pluginlib_export_plugin_description_file(controller_interface kontrolem_ros2_control_plugin.xml)

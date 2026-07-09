@@ -1,0 +1,47 @@
+# controller_manager config for the multi-controller Supervisor demo.
+#
+# ONE KontrolemController hosts BOTH an LQR (static gain) and an MPC
+# (receding-horizon) on the cart-pole. `control_laws` (a list, not the single
+# `control_law`) turns on multi-controller mode: the Supervisor drives the first
+# law and switches on a human command:
+#     ros2 topic pub -1 /kontrolem_controller/switch_controller \
+#         std_msgs/msg/String "{data: mpc}"
+# The switch is bumpless — the incoming law is seeded from the current state and
+# the command is blended over `switch_blend_ticks`. robot_description is injected
+# at launch time (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_laws: ["lqr", "mpc"]   # hosted laws; lqr initially active
+    switch_blend_ticks: 20         # command blend length at a switch (~0.1 s at 200 Hz)
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+
+    # Shared regulation setpoint: upright pole, centered cart.
+    q_ref: [0.0, 0.0]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+    publish_diagnostics: true      # diagnostics.control_law shows the ACTIVE law
+
+    # LQR design (state order [cart_pos, pole_angle, cart_vel, pole_vel]).
+    lqr.q_diag: [1.0, 10.0, 1.0, 1.0]
+    lqr.r_diag: [0.1]
+    lqr.q_dev_max: 0.5
+
+    # MPC design.
+    mpc.q_diag: [1.0, 10.0, 1.0, 1.0]
+    mpc.r_diag: [0.1]
+    mpc.horizon: 30
+    mpc.dt_mpc: 0.02
+    mpc.tau_max: 20.0

@@ -14,18 +14,21 @@
 #define KONTROLEM_ROS2_CONTROL__KONTROLEM_CONTROLLER_HPP_
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "controller_interface/controller_interface.hpp"
 #include "kontrolem_control/controller.hpp"
+#include "kontrolem_control/supervisor.hpp"
 #include "kontrolem_model/robot_model.hpp"
 #include "kontrolem_ros2_control/base_state_sensor.hpp"
 #include "kontrolem_ros2_control/contact_sensor.hpp"
 #include "kontrolem_msgs/msg/controller_diagnostics.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "realtime_tools/realtime_publisher.h"
+#include "std_msgs/msg/string.hpp"
 
 namespace kontrolem_ros2_control
 {
@@ -48,7 +51,7 @@ public:
 private:
   // Core (ROS-free) objects.
   std::optional<kontrolem_model::RobotModel> model_;
-  std::unique_ptr<kontrolem_control::Controller> law_;
+  std::unique_ptr<kontrolem_control::Controller> law_;             // single-law mode
   std::unique_ptr<kontrolem_control::ControlProblem> problem_;      // Regulation or Tracking
   std::unique_ptr<kontrolem_control::TrajectorySource> reference_;  // owned when Tracking
   kontrolem_control::State state_;
@@ -61,6 +64,17 @@ private:
   std::string vel_interface_{"velocity"};
   std::string safe_action_{"zero"};
   bool needs_velocity_{true};  // from the law's capabilities(); if false, claim positions only
+
+  // Multi-controller mode (control_laws non-empty): the Supervisor hosts several
+  // laws and drives one; a human commands the switch over ~/switch_controller
+  // (std_msgs/String, the target law name). The single-law path above is untouched
+  // when control_laws is empty. Automatic (status-driven) switching is a later layer.
+  bool multi_{false};
+  std::unique_ptr<kontrolem_control::Supervisor> supervisor_;
+  std::vector<std::unique_ptr<kontrolem_control::Controller>> laws_;  // owned hosted laws
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr switch_sub_;
+  std::mutex switch_mtx_;        // guards switch_request_ (topic thread vs RT update)
+  std::string switch_request_;   // pending target name from the topic ("" = none)
 
   // Floating-base (WBC) path: non-joint state (SE(3) base + contacts) enters via
   // <gpio> interfaces reassembled by the semantic components, and the actuated

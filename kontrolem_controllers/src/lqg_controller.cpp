@@ -114,6 +114,15 @@ void LqgController::configure(
   status_ = Status{true, 0.0};
 }
 
+void LqgController::seed_from_state(const State & state, const ControlProblem & problem)
+{
+  const auto & reg = static_cast<const Regulation &>(problem);
+  const int nv = static_cast<int>(xhat_.size()) / 2;  // xhat = [q_dev (nv); v_dev (nv)]
+  xhat_.head(nv) = state.q - reg.q_ref;
+  xhat_.tail(nv) =
+    (reg.v_ref.size() == nv) ? (state.v - reg.v_ref).eval() : state.v;
+}
+
 const Command & LqgController::compute(
   const State & state, const ControlProblem & problem, double dt)
 {
