@@ -29,6 +29,7 @@ The queryable dynamics service, built from a URDF and backed by Pinocchio.
 | `VectorXd neutral() const` | Neutral configuration (identity SE(3) root; unit quaternion). |
 | `VectorXd integrate(const VectorXd& q, const VectorXd& v, double dt) const` | `q ⊕ (v·dt)`, manifold-correct (SE(3) exp on the root). |
 | `VectorXd difference(const VectorXd& q0, const VectorXd& q1) const` | Tangent `d` with `integrate(q0,d) == q1` (SE(3) log). |
+| `void difference(const VectorXd& q0, const VectorXd& q1, VectorXd& out) const` | Same, allocation-free into a preallocated `out` (the RT overload). |
 
 ### Dynamics queries
 
@@ -57,8 +58,9 @@ The queryable dynamics service, built from a URDF and backed by Pinocchio.
 | `Vector3d center_of_mass(q) const` | World-frame CoM. |
 | `Vector3d frame_position(q, const std::string& frame) const` | World position of a named frame. |
 | `MatrixXd contact_jacobian(q, frame) const` | Translational (3×nv) Jacobian of one frame, world-aligned. |
-| `void contact_jacobian_stacked(Workspace&, q, feet, MatrixXd& J_out) const` | Stacked (3·nc × nv) contact Jacobian, RT. |
-| `void contact_drift(Workspace&, q, v, feet, VectorXd& gamma_out) const` | Contact drift `γ = J̇·v` (3·nc), RT. |
+| `std::size_t frame_index(const std::string& name) const` | Pinocchio frame index; resolve once, pass to the RT queries below (a per-tick name lookup allocates). |
+| `void contact_jacobian_stacked(Workspace&, q, feet_or_ids, MatrixXd& J_out) const` | Stacked (3·nc × nv) contact Jacobian, RT. Two overloads: `std::vector<std::size_t>` frame ids (allocation-free) or `std::vector<std::string>` names (resolves ids first). |
+| `void contact_drift(Workspace&, q, v, feet_or_ids, VectorXd& gamma_out) const` | Contact drift `γ = J̇·v` (3·nc), RT. Same two overloads. |
 | `VectorXd contact_forward_dynamics(Workspace&, q, v, tau, feet, anchors, kp, kd, VectorXd* lambda_out = nullptr) const` | Constrained forward dynamics (feet pinned) via a damped Schur complement; optional Baumgarte to `anchors`. Returns `q̈`; writes contact forces `λ` if requested. |
 
 ### Workspace

@@ -43,6 +43,10 @@ void WbcController::configure(
   for (const auto & a : actuated_) {
     act_v_.push_back(model.joint_v_index(a));
   }
+  feet_ids_.clear();
+  for (const auto & f : feet_) {
+    feet_ids_.push_back(model.frame_index(f));  // resolve once; RT queries use the ids
+  }
 
   // Column layout of z = [qddot(nv) | lambda(3nc) | tau(m)].
   off_lambda_ = nv_;
@@ -133,13 +137,15 @@ const Command & WbcController::compute(
 
   // Frame-consistent PD task: qddot_des = -Kp (q ⊖ q_ref) - Kd v (all in the
   // generalized tangent space, so the SE(3) base error is handled correctly).
-  e_ = model_->difference(reg.q_ref, state.q);  // NOTE: allocates (RT-audit TODO)
+  // In-place difference into the preallocated buffer keeps compute() allocation-free.
+  model_->difference(reg.q_ref, state.q, e_);
   qdd_des_.array() = -Kp_.array() * e_.array() - Kd_.array() * state.v.array();
 
-  // Instantaneous floating-base dynamics + contact geometry (into preallocated buffers).
+  // Instantaneous floating-base dynamics + contact geometry (into preallocated
+  // buffers, by cached frame index — no per-tick name lookup or allocation).
   model_->dynamics(*ws_, state.q, state.v, M_, h_);
-  model_->contact_jacobian_stacked(*ws_, state.q, feet_, J_);
-  model_->contact_drift(*ws_, state.q, state.v, feet_, gamma_);
+  model_->contact_jacobian_stacked(*ws_, state.q, feet_ids_, J_);
+  model_->contact_drift(*ws_, state.q, state.v, feet_ids_, gamma_);
 
   // Refresh the tick-varying QP blocks.
   A_.block(row_dyn_, 0, nv_, nv_) = M_;
