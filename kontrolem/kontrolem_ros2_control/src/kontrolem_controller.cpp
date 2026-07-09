@@ -8,6 +8,7 @@
 #include "kontrolem_controllers/lqg_controller.hpp"
 #include "kontrolem_controllers/mpc_controller.hpp"
 #include "kontrolem_controllers/qp_task_space_controller.hpp"
+#include "kontrolem_controllers/wbc_controller.hpp"
 #include "pluginlib/class_list_macros.hpp"
 
 namespace kontrolem_ros2_control
@@ -80,7 +81,22 @@ std::unique_ptr<kc::Controller> make_law(
       actuated, W, node.get_parameter("qp.kp").as_double(),
       node.get_parameter("qp.kd").as_double(), node.get_parameter("qp.tau_max").as_double());
   }
-  throw std::runtime_error("unknown control_law '" + law + "' (expected 'lqr' or 'qp')");
+  if (law == "wbc") {
+    kctl::WbcController::Gains g;
+    g.kp_base = node.get_parameter("wbc.kp_base").as_double();
+    g.kd_base = node.get_parameter("wbc.kd_base").as_double();
+    g.kp_post = node.get_parameter("wbc.kp_post").as_double();
+    g.kd_post = node.get_parameter("wbc.kd_post").as_double();
+    g.w_base = node.get_parameter("wbc.w_base").as_double();
+    g.w_post = node.get_parameter("wbc.w_post").as_double();
+    g.w_force = node.get_parameter("wbc.w_force").as_double();
+    g.w_tau = node.get_parameter("wbc.w_tau").as_double();
+    g.mu = node.get_parameter("wbc.mu").as_double();
+    g.tau_max = node.get_parameter("wbc.tau_max").as_double();
+    const auto feet = node.get_parameter("contact_frames").as_string_array();
+    return std::make_unique<kctl::WbcController>(feet, actuated, g);
+  }
+  throw std::runtime_error("unknown control_law '" + law + "' (expected lqr/lqg/mpc/qp/wbc)");
 }
 }  // namespace
 
@@ -120,6 +136,23 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<double>("qp.kp", 50.0);
     auto_declare<double>("qp.kd", 10.0);
     auto_declare<double>("qp.tau_max", 5.0);
+    // Floating-base / WBC.
+    auto_declare<std::string>("base_type", "fixed");     // "fixed" or "floating"
+    auto_declare<std::string>("base_gpio", "floating_base");
+    auto_declare<std::string>("contact_gpio", "contact");
+    auto_declare<std::vector<std::string>>("contact_frames", {});  // e.g. [foot_FL, ...]
+    auto_declare<double>("wbc.base_height", 0.0);        // nominal base z of the stance
+    auto_declare<std::vector<double>>("wbc.nominal_posture", {});  // per actuated joint
+    auto_declare<double>("wbc.kp_base", 100.0);
+    auto_declare<double>("wbc.kd_base", 20.0);
+    auto_declare<double>("wbc.kp_post", 25.0);
+    auto_declare<double>("wbc.kd_post", 5.0);
+    auto_declare<double>("wbc.w_base", 100.0);
+    auto_declare<double>("wbc.w_post", 1.0);
+    auto_declare<double>("wbc.w_force", 1e-4);
+    auto_declare<double>("wbc.w_tau", 1e-4);
+    auto_declare<double>("wbc.mu", 0.7);
+    auto_declare<double>("wbc.tau_max", 40.0);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "on_init failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -145,9 +178,12 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
   pos_interface_ = node.get_parameter("state_position_interface").as_string();
   vel_interface_ = node.get_parameter("state_velocity_interface").as_string();
   safe_action_ = node.get_parameter("safe_action").as_string();
+  floating_ = (node.get_parameter("base_type").as_string() == "floating");
 
   try {
-    model_ = kontrolem_model::RobotModel::from_urdf_string(urdf);
+    model_ = kontrolem_model::RobotModel::from_urdf_string(
+      urdf, floating_ ? kontrolem_model::BaseType::kFloating
+                      : kontrolem_model::BaseType::kFixed);
     const int nq = model_->nq();
     const int nv = model_->nv();
 
@@ -160,6 +196,25 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
       }
       return out;
     };
+
+    // Floating-base (WBC) setup: semantic components + a standing Regulation
+    // built by generalized-coordinate index (robust to joint ordering).
+    if (floating_) {
+      feet_ = node.get_parameter("contact_frames").as_string_array();
+      base_gpio_ = node.get_parameter("base_gpio").as_string();
+      contact_gpio_ = node.get_parameter("contact_gpio").as_string();
+      base_sensor_.emplace(base_gpio_);
+      contact_sensor_.emplace(contact_gpio_, feet_);
+      auto reg = std::make_unique<kc::Regulation>();
+      reg->q_ref = model_->neutral();
+      reg->q_ref(2) = node.get_parameter("wbc.base_height").as_double();
+      const auto posture = node.get_parameter("wbc.nominal_posture").as_double_array();
+      for (std::size_t k = 0; k < actuated_joints_.size() && k < posture.size(); ++k) {
+        reg->q_ref(model_->joint_q_index(actuated_joints_[k])) = posture[k];
+      }
+      reg->v_ref = Eigen::VectorXd::Zero(nv);
+      problem_ = std::move(reg);
+    } else {
 
     // Build the problem: a fixed setpoint (Regulation) or a moving reference
     // (Tracking) selected by the reference_type param.
@@ -182,12 +237,13 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
       reg->v_ref = vec_param("v_ref", nv);
       problem_ = std::move(reg);
     }
+    }  // end fixed-base problem build
 
     const auto law = node.get_parameter("control_law").as_string();
     law_ = make_law(node, law, actuated_joints_, *model_);
     if (!kc::accepts(*law_, *problem_)) {
-      RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept the '%s' problem",
-                   law.c_str(), ref_type.c_str());
+      RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept problem dialect %d",
+                   law.c_str(), static_cast<int>(problem_->kind()));
       return CallbackReturn::ERROR;
     }
     auto synth = law_->synthesize(*model_, *problem_);
@@ -230,6 +286,19 @@ InterfaceConfiguration KontrolemController::state_interface_configuration() cons
 {
   InterfaceConfiguration cfg;
   cfg.type = interface_configuration_type::INDIVIDUAL;
+
+  if (floating_) {
+    // Floating base: the ACTUATED joints have encoders; the SE(3) base and the
+    // contacts arrive as <gpio> scalars claimed via the semantic components.
+    for (const auto & j : actuated_joints_) {
+      cfg.names.push_back(j + "/" + pos_interface_);
+      cfg.names.push_back(j + "/" + vel_interface_);
+    }
+    for (const auto & n : base_sensor_->interface_names()) cfg.names.push_back(n);
+    for (const auto & n : contact_sensor_->interface_names()) cfg.names.push_back(n);
+    return cfg;
+  }
+
   for (const auto & j : model_->joint_names()) {
     cfg.names.push_back(j + "/" + pos_interface_);
   }
@@ -256,6 +325,29 @@ CallbackReturn KontrolemController::on_activate(const rclcpp_lifecycle::State &)
     return ifaces.size();
   };
 
+  if (floating_) {
+    act_q_idx_.clear();
+    act_v_idx_.clear();
+    jpos_idx_.assign(actuated_joints_.size(), 0);
+    jvel_idx_.assign(actuated_joints_.size(), 0);
+    for (std::size_t i = 0; i < actuated_joints_.size(); ++i) {
+      act_q_idx_.push_back(model_->joint_q_index(actuated_joints_[i]));
+      act_v_idx_.push_back(model_->joint_v_index(actuated_joints_[i]));
+      jpos_idx_[i] = find(state_interfaces_, actuated_joints_[i] + "/" + pos_interface_);
+      jvel_idx_[i] = find(state_interfaces_, actuated_joints_[i] + "/" + vel_interface_);
+      if (jpos_idx_[i] == state_interfaces_.size() || jvel_idx_[i] == state_interfaces_.size()) {
+        RCLCPP_ERROR(get_node()->get_logger(), "missing pos/vel interface for joint '%s'",
+                     actuated_joints_[i].c_str());
+        return CallbackReturn::ERROR;
+      }
+    }
+    if (!base_sensor_->assign_loaned(state_interfaces_) ||
+        !contact_sensor_->assign_loaned(state_interfaces_)) {
+      RCLCPP_ERROR(get_node()->get_logger(), "failed to bind base/contact <gpio> interfaces");
+      return CallbackReturn::ERROR;
+    }
+    contact_buf_.assign(feet_.size(), 0.0);
+  } else {
   const auto & joints = model_->joint_names();
   pos_idx_.assign(joints.size(), 0);
   vel_idx_.assign(needs_velocity_ ? joints.size() : 0, 0);
@@ -275,6 +367,8 @@ CallbackReturn KontrolemController::on_activate(const rclcpp_lifecycle::State &)
       }
     }
   }
+  }  // end fixed-base index resolution
+
   cmd_idx_.assign(actuated_joints_.size(), 0);
   for (std::size_t i = 0; i < actuated_joints_.size(); ++i) {
     cmd_idx_[i] = find(command_interfaces_, actuated_joints_[i] + "/" + command_interface_);
@@ -299,15 +393,25 @@ controller_interface::return_type KontrolemController::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   const auto t_start = std::chrono::steady_clock::now();
-  // Assemble State from the claimed state interfaces (model joint order). Velocity
-  // is read only if claimed; for an output-feedback law state_.v stays zero and
-  // the law estimates it internally.
-  for (std::size_t i = 0; i < pos_idx_.size(); ++i) {
-    state_.q(static_cast<Eigen::Index>(i)) = state_interfaces_[pos_idx_[i]].get_value();
-  }
-  if (needs_velocity_) {
-    for (std::size_t i = 0; i < vel_idx_.size(); ++i) {
-      state_.v(static_cast<Eigen::Index>(i)) = state_interfaces_[vel_idx_[i]].get_value();
+  // Assemble State from the claimed state interfaces. For a floating base the SE(3)
+  // root (q[0..6]/v[0..5], quaternion normalized) comes from the semantic base
+  // sensor and each actuated joint fills its generalized-coordinate slot; for a
+  // fixed base the joint interfaces map straight into q/v (model joint order).
+  if (floating_) {
+    base_sensor_->read_into(state_.q, state_.v);
+    for (std::size_t i = 0; i < act_q_idx_.size(); ++i) {
+      state_.q(act_q_idx_[i]) = state_interfaces_[jpos_idx_[i]].get_value();
+      state_.v(act_v_idx_[i]) = state_interfaces_[jvel_idx_[i]].get_value();
+    }
+    contact_sensor_->read_into(contact_buf_);  // ground-truth stance (WBC schedules all-stance)
+  } else {
+    for (std::size_t i = 0; i < pos_idx_.size(); ++i) {
+      state_.q(static_cast<Eigen::Index>(i)) = state_interfaces_[pos_idx_[i]].get_value();
+    }
+    if (needs_velocity_) {
+      for (std::size_t i = 0; i < vel_idx_.size(); ++i) {
+        state_.v(static_cast<Eigen::Index>(i)) = state_interfaces_[vel_idx_[i]].get_value();
+      }
     }
   }
   state_.t = (time - start_time_).seconds();  // reference clock for Tracking

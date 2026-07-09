@@ -25,9 +25,13 @@ public:
   QpSolver & operator=(const QpSolver &) = delete;
 
   /// P (nz x nz, symmetric — upper triangle used), A (nc x nz). Allocates.
+  /// `eps` sets OSQP's absolute+relative tolerance (default 1e-6 — crisp
+  /// constraint satisfaction for small linear QPs; a WBC solving for contact
+  /// forces in newtons uses a looser value so stiff transients still converge to
+  /// OSQP_SOLVED rather than SOLVED_INACCURATE).
   void setup(
     const Eigen::MatrixXd & P, const Eigen::MatrixXd & A, const Eigen::VectorXd & q,
-    const Eigen::VectorXd & l, const Eigen::VectorXd & u);
+    const Eigen::VectorXd & l, const Eigen::VectorXd & u, double eps = 1e-6);
 
   /// Warm-started re-solve with new q, l, u and A values (same sparsity as
   /// setup; P unchanged). Returns the solution z (reference to internal buffer).

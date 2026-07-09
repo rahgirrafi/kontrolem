@@ -18,7 +18,8 @@ add_library(kontrolem_controllers SHARED
   src/lqg_controller.cpp
   src/mpc_controller.cpp
   src/qp_solver.cpp
-  src/qp_task_space_controller.cpp)
+  src/qp_task_space_controller.cpp
+  src/wbc_controller.cpp)
 target_include_directories(kontrolem_controllers PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
@@ -81,6 +82,14 @@ if(BUILD_TESTING)
   target_compile_definitions(test_qp_cartpole PRIVATE
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME qp_cartpole COMMAND test_qp_cartpole)
+
+  # WBC standing + push recovery on the floating quadruped (M4), closed-loop
+  # against the model's contact-constrained forward dynamics (the "ground").
+  add_executable(test_wbc_standing test/test_wbc_standing.cpp)
+  target_link_libraries(test_wbc_standing kontrolem_controllers)
+  target_compile_definitions(test_wbc_standing PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME wbc_standing COMMAND test_wbc_standing)
 
   add_executable(test_allocation test/test_allocation.cpp)
   target_link_libraries(test_allocation kontrolem_controllers)

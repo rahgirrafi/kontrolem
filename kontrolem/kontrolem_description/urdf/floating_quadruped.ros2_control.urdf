@@ -1,0 +1,213 @@
+<?xml version="1.0"?>
+<!-- GENERATED — floating quadruped wired to ros2_control for the standing-WBC demo
+     (M4). Body identical to kontrolem_model/robots/floating_quadruped.urdf; the
+     <ros2_control> block uses FloatingContactSimSystem (feet pinned = ground) and
+     carries the SE(3) base + per-foot contact as scalar <gpio> interfaces. Joint
+     initial_value = the standing posture; the hardware base_height matches. -->
+<robot name="floating_quadruped">
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="5.0"/>
+      <inertia ixx="0.08" ixy="0" ixz="0" iyy="0.15" iyz="0" izz="0.18"/>
+    </inertial>
+  </link>
+
+  <joint name="hipx_FL" type="revolute">
+    <parent link="base_link"/><child link="hipx_FL_link"/>
+    <origin xyz="0.2 0.15 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit effort="40" velocity="20" lower="-0.8" upper="0.8"/>
+  </joint>
+  <link name="hipx_FL_link"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.3"/>
+    <inertia ixx="3e-4" ixy="0" ixz="0" iyy="3e-4" iyz="0" izz="3e-4"/></inertial></link>
+  <joint name="hipy_FL" type="revolute">
+    <parent link="hipx_FL_link"/><child link="thigh_FL"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.0" upper="2.0"/>
+  </joint>
+  <link name="thigh_FL"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.5"/>
+    <inertia ixx="0.0015" ixy="0" ixz="0" iyy="0.0015" iyz="0" izz="0.0002"/></inertial></link>
+  <joint name="knee_FL" type="revolute">
+    <parent link="thigh_FL"/><child link="calf_FL"/>
+    <origin xyz="0 0 -0.18" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.6" upper="0.0"/>
+  </joint>
+  <link name="calf_FL"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.25"/>
+    <inertia ixx="0.0008" ixy="0" ixz="0" iyy="0.0008" iyz="0" izz="0.0001"/></inertial></link>
+  <joint name="foot_FL_fixed" type="fixed">
+    <parent link="calf_FL"/><child link="foot_FL"/><origin xyz="0 0 -0.18" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_FL"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.04"/>
+    <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial></link>
+
+  <joint name="hipx_FR" type="revolute">
+    <parent link="base_link"/><child link="hipx_FR_link"/>
+    <origin xyz="0.2 -0.15 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit effort="40" velocity="20" lower="-0.8" upper="0.8"/>
+  </joint>
+  <link name="hipx_FR_link"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.3"/>
+    <inertia ixx="3e-4" ixy="0" ixz="0" iyy="3e-4" iyz="0" izz="3e-4"/></inertial></link>
+  <joint name="hipy_FR" type="revolute">
+    <parent link="hipx_FR_link"/><child link="thigh_FR"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.0" upper="2.0"/>
+  </joint>
+  <link name="thigh_FR"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.5"/>
+    <inertia ixx="0.0015" ixy="0" ixz="0" iyy="0.0015" iyz="0" izz="0.0002"/></inertial></link>
+  <joint name="knee_FR" type="revolute">
+    <parent link="thigh_FR"/><child link="calf_FR"/>
+    <origin xyz="0 0 -0.18" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.6" upper="0.0"/>
+  </joint>
+  <link name="calf_FR"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.25"/>
+    <inertia ixx="0.0008" ixy="0" ixz="0" iyy="0.0008" iyz="0" izz="0.0001"/></inertial></link>
+  <joint name="foot_FR_fixed" type="fixed">
+    <parent link="calf_FR"/><child link="foot_FR"/><origin xyz="0 0 -0.18" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_FR"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.04"/>
+    <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial></link>
+
+  <joint name="hipx_RL" type="revolute">
+    <parent link="base_link"/><child link="hipx_RL_link"/>
+    <origin xyz="-0.2 0.15 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit effort="40" velocity="20" lower="-0.8" upper="0.8"/>
+  </joint>
+  <link name="hipx_RL_link"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.3"/>
+    <inertia ixx="3e-4" ixy="0" ixz="0" iyy="3e-4" iyz="0" izz="3e-4"/></inertial></link>
+  <joint name="hipy_RL" type="revolute">
+    <parent link="hipx_RL_link"/><child link="thigh_RL"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.0" upper="2.0"/>
+  </joint>
+  <link name="thigh_RL"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.5"/>
+    <inertia ixx="0.0015" ixy="0" ixz="0" iyy="0.0015" iyz="0" izz="0.0002"/></inertial></link>
+  <joint name="knee_RL" type="revolute">
+    <parent link="thigh_RL"/><child link="calf_RL"/>
+    <origin xyz="0 0 -0.18" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.6" upper="0.0"/>
+  </joint>
+  <link name="calf_RL"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.25"/>
+    <inertia ixx="0.0008" ixy="0" ixz="0" iyy="0.0008" iyz="0" izz="0.0001"/></inertial></link>
+  <joint name="foot_RL_fixed" type="fixed">
+    <parent link="calf_RL"/><child link="foot_RL"/><origin xyz="0 0 -0.18" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_RL"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.04"/>
+    <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial></link>
+
+  <joint name="hipx_RR" type="revolute">
+    <parent link="base_link"/><child link="hipx_RR_link"/>
+    <origin xyz="-0.2 -0.15 0" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit effort="40" velocity="20" lower="-0.8" upper="0.8"/>
+  </joint>
+  <link name="hipx_RR_link"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.3"/>
+    <inertia ixx="3e-4" ixy="0" ixz="0" iyy="3e-4" iyz="0" izz="3e-4"/></inertial></link>
+  <joint name="hipy_RR" type="revolute">
+    <parent link="hipx_RR_link"/><child link="thigh_RR"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.0" upper="2.0"/>
+  </joint>
+  <link name="thigh_RR"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.5"/>
+    <inertia ixx="0.0015" ixy="0" ixz="0" iyy="0.0015" iyz="0" izz="0.0002"/></inertial></link>
+  <joint name="knee_RR" type="revolute">
+    <parent link="thigh_RR"/><child link="calf_RR"/>
+    <origin xyz="0 0 -0.18" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit effort="40" velocity="20" lower="-2.6" upper="0.0"/>
+  </joint>
+  <link name="calf_RR"><inertial><origin xyz="0 0 -0.09" rpy="0 0 0"/><mass value="0.25"/>
+    <inertia ixx="0.0008" ixy="0" ixz="0" iyy="0.0008" iyz="0" izz="0.0001"/></inertial></link>
+  <joint name="foot_RR_fixed" type="fixed">
+    <parent link="calf_RR"/><child link="foot_RR"/><origin xyz="0 0 -0.18" rpy="0 0 0"/>
+  </joint>
+  <link name="foot_RR"><inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.04"/>
+    <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/></inertial></link>
+
+  <ros2_control name="floating_quadruped_sim" type="system">
+    <hardware>
+      <plugin>kontrolem_description/FloatingContactSimSystem</plugin>
+      <param name="contact_frames">foot_FL,foot_FR,foot_RL,foot_RR</param>
+      <param name="base_height">0.2753</param>
+    </hardware>
+    <joint name="hipx_FL">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipy_FL">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.7</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="knee_FL">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">-1.4</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipx_FR">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipy_FR">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.7</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="knee_FR">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">-1.4</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipx_RL">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipy_RL">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.7</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="knee_RL">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">-1.4</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipx_RR">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="hipy_RR">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.7</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+    <joint name="knee_RR">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">-1.4</param></state_interface>
+      <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+    </joint>
+
+    <gpio name="floating_base">
+      <state_interface name="pose.position.x"/>
+      <state_interface name="pose.position.y"/>
+      <state_interface name="pose.position.z"/>
+      <state_interface name="pose.orientation.x"/>
+      <state_interface name="pose.orientation.y"/>
+      <state_interface name="pose.orientation.z"/>
+      <state_interface name="pose.orientation.w"/>
+      <state_interface name="twist.linear.x"/>
+      <state_interface name="twist.linear.y"/>
+      <state_interface name="twist.linear.z"/>
+      <state_interface name="twist.angular.x"/>
+      <state_interface name="twist.angular.y"/>
+      <state_interface name="twist.angular.z"/>
+    </gpio>
+    <gpio name="contact">
+      <state_interface name="contact.foot_FL"/>
+      <state_interface name="contact.foot_FR"/>
+      <state_interface name="contact.foot_RL"/>
+      <state_interface name="contact.foot_RR"/>
+    </gpio>
+  </ros2_control>
+</robot>

@@ -21,6 +21,8 @@
 #include "controller_interface/controller_interface.hpp"
 #include "kontrolem_control/controller.hpp"
 #include "kontrolem_model/robot_model.hpp"
+#include "kontrolem_ros2_control/base_state_sensor.hpp"
+#include "kontrolem_ros2_control/contact_sensor.hpp"
 #include "kontrolem_msgs/msg/controller_diagnostics.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include "realtime_tools/realtime_publisher.h"
@@ -59,6 +61,20 @@ private:
   std::string vel_interface_{"velocity"};
   std::string safe_action_{"zero"};
   bool needs_velocity_{true};  // from the law's capabilities(); if false, claim positions only
+
+  // Floating-base (WBC) path: non-joint state (SE(3) base + contacts) enters via
+  // <gpio> interfaces reassembled by the semantic components, and the actuated
+  // joints are addressed by generalized-coordinate index (the free-flyer root is
+  // not an encoder). The fixed-base path above is untouched.
+  bool floating_{false};
+  std::string base_gpio_{"floating_base"};
+  std::string contact_gpio_{"contact"};
+  std::vector<std::string> feet_;                 // contact frame names (WBC + ContactSensor)
+  std::optional<BaseStateSensor> base_sensor_;
+  std::optional<ContactSensor> contact_sensor_;
+  std::vector<int> act_q_idx_, act_v_idx_;        // generalized q/v index per actuated joint
+  std::vector<std::size_t> jpos_idx_, jvel_idx_;  // state-iface index per actuated joint
+  std::vector<double> contact_buf_;               // scratch for reading contact scalars
 
   // Telemetry (opt-in, RT-safe): per-tick ControllerDiagnostics on ~/diagnostics.
   bool publish_diagnostics_{false};

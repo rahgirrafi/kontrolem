@@ -21,6 +21,7 @@ find_package(kontrolem_controllers REQUIRED)
 add_library(kontrolem_ros2_control SHARED
   src/kontrolem_controller.cpp
   src/base_state_sensor.cpp
+  src/contact_sensor.cpp
   src/floating_state_probe.cpp)
 target_include_directories(kontrolem_ros2_control PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"

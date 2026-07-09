@@ -1,0 +1,59 @@
+# controller_manager config for the M4 standing-WBC demo: a QP whole-body
+# controller holds the floating quadruped up through the SAME KontrolemController
+# runtime that hosts LQR/QP/LQG/MPC — only control_law and base_type differ.
+#
+# The robot_description (URDF) is injected at launch as the
+# kontrolem_controller.robot_description parameter (see launch/quad_stand.launch.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 500  # Hz — matches the offline WBC proof (dt = 0.002)
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: wbc
+    base_type: floating          # SE(3) base + contacts via <gpio> semantic components
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+    publish_diagnostics: true
+
+    # 3-DoF legs; order fixes the actuation selection Sᵀ and the nominal_posture.
+    actuated_joints:
+      - hipx_FL
+      - hipy_FL
+      - knee_FL
+      - hipx_FR
+      - hipy_FR
+      - knee_FR
+      - hipx_RL
+      - hipy_RL
+      - knee_RL
+      - hipx_RR
+      - hipy_RR
+      - knee_RR
+    contact_frames: [foot_FL, foot_FR, foot_RL, foot_RR]
+    base_gpio: floating_base
+    contact_gpio: contact
+
+    # Standing posture (matches the sim's initial state + base_height).
+    wbc.base_height: 0.2753
+    wbc.nominal_posture: [0.0, 0.7, -1.4, 0.0, 0.7, -1.4, 0.0, 0.7, -1.4, 0.0, 0.7, -1.4]
+
+    # QP task gains / weights + friction and torque limits (the offline-proven set).
+    wbc.kp_base: 100.0
+    wbc.kd_base: 20.0
+    wbc.kp_post: 25.0
+    wbc.kd_post: 5.0
+    wbc.w_base: 100.0
+    wbc.w_post: 1.0
+    wbc.w_force: 0.0001
+    wbc.w_tau: 0.0001
+    wbc.mu: 0.7
+    wbc.tau_max: 40.0

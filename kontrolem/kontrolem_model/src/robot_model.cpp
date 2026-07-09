@@ -9,6 +9,7 @@
 #include <pinocchio/algorithm/crba.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/jacobian.hpp>
+#include <pinocchio/algorithm/kinematics.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
 #include <pinocchio/algorithm/rnea.hpp>
 #include <pinocchio/multibody/data.hpp>
@@ -106,8 +107,10 @@ struct RobotModel::Workspace::Impl
 {
   pinocchio::Data data;
   Eigen::VectorXd zero;  // preallocated a = 0 argument for rnea
+  Eigen::MatrixXd J6;    // 6 x nv scratch for per-frame Jacobians
   explicit Impl(const pinocchio::Model & model)
-  : data(model), zero(Eigen::VectorXd::Zero(model.nv))
+  : data(model), zero(Eigen::VectorXd::Zero(model.nv)),
+    J6(Eigen::MatrixXd::Zero(6, model.nv))
   {
   }
 };
@@ -198,6 +201,107 @@ Eigen::MatrixXd RobotModel::contact_jacobian(
   return J6.topRows(3);  // translational part: v_world = J * v_generalized
 }
 
+void RobotModel::contact_jacobian_stacked(
+  Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::string> & feet,
+  Eigen::MatrixXd & J_out) const
+{
+  const auto & model = impl_->model;
+  auto & data = ws.impl_->data;
+  const int nv = model.nv;
+  const int nc = static_cast<int>(feet.size());
+  if (J_out.rows() != 3 * nc || J_out.cols() != nv) {
+    J_out.resize(3 * nc, nv);
+  }
+  pinocchio::computeJointJacobians(model, data, q);  // fills data.J once
+  pinocchio::updateFramePlacements(model, data);
+  for (int k = 0; k < nc; ++k) {
+    if (!model.existFrame(feet[k])) {
+      throw std::runtime_error("contact_jacobian_stacked: no frame '" + feet[k] + "'");
+    }
+    const auto fid = model.getFrameId(feet[k]);
+    ws.impl_->J6.setZero();
+    pinocchio::getFrameJacobian(model, data, fid, pinocchio::LOCAL_WORLD_ALIGNED, ws.impl_->J6);
+    J_out.middleRows(3 * k, 3) = ws.impl_->J6.topRows(3);  // translational block
+  }
+}
+
+void RobotModel::contact_drift(
+  Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
+  const std::vector<std::string> & feet, Eigen::VectorXd & gamma_out) const
+{
+  const auto & model = impl_->model;
+  auto & data = ws.impl_->data;
+  const int nc = static_cast<int>(feet.size());
+  if (gamma_out.size() != 3 * nc) {
+    gamma_out.resize(3 * nc);
+  }
+  // Classical acceleration at zero joint acceleration is exactly d/dt(J)·v.
+  pinocchio::forwardKinematics(model, data, q, v, ws.impl_->zero);
+  pinocchio::updateFramePlacements(model, data);
+  for (int k = 0; k < nc; ++k) {
+    if (!model.existFrame(feet[k])) {
+      throw std::runtime_error("contact_drift: no frame '" + feet[k] + "'");
+    }
+    const auto fid = model.getFrameId(feet[k]);
+    const auto acc = pinocchio::getFrameClassicalAcceleration(
+      model, data, fid, pinocchio::LOCAL_WORLD_ALIGNED);
+    gamma_out.segment(3 * k, 3) = acc.linear();
+  }
+}
+
+Eigen::VectorXd RobotModel::contact_forward_dynamics(
+  Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
+  const Eigen::VectorXd & tau, const std::vector<std::string> & feet,
+  const std::vector<Eigen::Vector3d> & anchors, double baumgarte_kp, double baumgarte_kd,
+  Eigen::VectorXd * lambda_out) const
+{
+  const auto & model = impl_->model;
+  auto & data = ws.impl_->data;
+  const int nv = model.nv;
+  const int nc = static_cast<int>(feet.size());
+
+  // M (crba, mirrored) and h (rnea with a=0) — captured before J/gamma recompute
+  // data via kinematics calls below.
+  pinocchio::crba(model, data, q);
+  data.M.triangularView<Eigen::StrictlyLower>() =
+    data.M.transpose().triangularView<Eigen::StrictlyLower>();
+  const Eigen::MatrixXd M = data.M;
+  const Eigen::VectorXd h = pinocchio::rnea(model, data, q, v, ws.impl_->zero);
+
+  const Eigen::LDLT<Eigen::MatrixXd> Mldlt(M);
+  if (nc == 0) {
+    return Mldlt.solve(tau - h);  // no contacts ⇒ free dynamics (== aba)
+  }
+
+  Eigen::MatrixXd J(3 * nc, nv);
+  contact_jacobian_stacked(ws, q, feet, J);
+  Eigen::VectorXd gamma(3 * nc);
+  contact_drift(ws, q, v, feet, gamma);  // leaves data.oMf valid at q
+
+  if (baumgarte_kp != 0.0 || baumgarte_kd != 0.0) {
+    const Eigen::VectorXd Jv = J * v;
+    for (int k = 0; k < nc; ++k) {
+      const Eigen::Vector3d pos = data.oMf[model.getFrameId(feet[k])].translation();
+      const Eigen::Vector3d anchor =
+        (static_cast<int>(anchors.size()) > k) ? anchors[static_cast<std::size_t>(k)] : pos;
+      gamma.segment(3 * k, 3) +=
+        baumgarte_kp * (pos - anchor) + baumgarte_kd * Jv.segment(3 * k, 3);
+    }
+  }
+
+  // Damped Schur complement: (J Minv Jᵀ + εI) λ = −γ − J Minv (tau−h); then
+  // q̈ = Minv (tau−h) + Minv Jᵀ λ. Damping keeps redundant contacts well-posed.
+  const Eigen::VectorXd Minv_rhs = Mldlt.solve(tau - h);
+  const Eigen::MatrixXd MinvJt = Mldlt.solve(J.transpose());
+  Eigen::MatrixXd Gm = J * MinvJt;
+  Gm.diagonal().array() += 1e-8;
+  const Eigen::VectorXd lambda = Gm.ldlt().solve(-gamma - J * Minv_rhs);
+  if (lambda_out != nullptr) {
+    *lambda_out = lambda;
+  }
+  return Minv_rhs + MinvJt * lambda;
+}
+
 Eigen::VectorXd RobotModel::integrate(
   const Eigen::VectorXd & q, const Eigen::VectorXd & v, double dt) const
 {
@@ -209,6 +313,13 @@ Eigen::VectorXd RobotModel::integrate(
 Eigen::VectorXd RobotModel::neutral() const
 {
   return pinocchio::neutral(impl_->model);
+}
+
+Eigen::VectorXd RobotModel::difference(
+  const Eigen::VectorXd & q0, const Eigen::VectorXd & q1) const
+{
+  // Tangent d with integrate(q0, d) == q1; SE(3) log on the free-flyer root.
+  return pinocchio::difference(impl_->model, q0, q1);
 }
 
 RobotModel::Trajectory RobotModel::rollout(
@@ -249,5 +360,23 @@ std::vector<Linearization> RobotModel::linearize_along(
 int RobotModel::nq() const { return impl_->model.nq; }
 int RobotModel::nv() const { return impl_->model.nv; }
 const std::vector<std::string> & RobotModel::joint_names() const { return impl_->joint_names; }
+
+int RobotModel::joint_q_index(const std::string & name) const
+{
+  const auto & model = impl_->model;
+  if (!model.existJointName(name)) {
+    throw std::runtime_error("RobotModel::joint_q_index: no joint '" + name + "'");
+  }
+  return model.idx_qs[model.getJointId(name)];
+}
+
+int RobotModel::joint_v_index(const std::string & name) const
+{
+  const auto & model = impl_->model;
+  if (!model.existJointName(name)) {
+    throw std::runtime_error("RobotModel::joint_v_index: no joint '" + name + "'");
+  }
+  return model.idx_vs[model.getJointId(name)];
+}
 
 }  // namespace kontrolem_model
