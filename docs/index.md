@@ -1,146 +1,74 @@
-# Kontrol'Em — state-space control for ROS 2
+# Kontrol'Em v2 documentation
 
-**Kontrol'Em** is an end-to-end, ROS 2-native workflow for **linear
-state-space control design** on robots described by a URDF — from
-rigid-body model to synthesized controller to animated closed-loop
-response. It is, in spirit, a *MoveIt Setup Assistant for state-space
-control*: MoveIt targets motion planning; Kontrol'Em targets controller
-synthesis (LQR, LQG, H∞, PID) on plants linearized directly from the
-robot's own URDF.
+**Kontrol'Em is a robot-agnostic, plugin-based control framework for ROS 2 — "MoveIt for control."** One runtime (`KontrolemController`) hosts many control paradigms — a stored LQR gain, an online QP, an output-feedback compensator (LQG), a receding-horizon MPC, and a floating-base whole-body controller (WBC) — behind a single controller contract, on fixed-base *and* floating-base robots. The dynamics come from Pinocchio; the numerics are wrapped behind seams; Layers 1–3 have zero ROS dependency.
 
-```{note}
-Research software accompanying an undergraduate thesis.
-Simulation-validated on the included examples.
-Source: [github.com/rahgirrafi/kontrolem](https://github.com/rahgirrafi/kontrolem)
-· License: MIT.
-```
+---
 
-## In plain words
+## Find your path in 10 seconds
 
-Some robots naturally fall over — think of balancing a broom on your hand.
-Keeping them steady takes constant, split-second corrections; that job is
-done by a piece of software called a **controller**. Kontrol'Em **designs
-that controller for you** from a description of your robot, lets you **watch
-it work** in your browser, and **runs it** on a real or simulated robot — no
-control-theory PhD required to get started.
+**I want to *use* it** — run a controller, get a robot balancing/standing, tune it, wire it to my robot.
+→ Start with the **[Tutorials](#tutorials)**, then dip into the **[How-to guides](#how-to-guides)** for specific tasks. You do not need to read the architecture.
 
-```{admonition} New here? Follow this path
-:class: tip
+**I want to *understand or extend* it** — add a controller, read the API, know why it's built this way.
+→ Go to the **[Reference](#reference)** for exact facts and the **[Explanation](#explanation)** for the design rationale.
 
-1. **{doc}`The big ideas, in plain words <concepts>`** — 10 minutes, no math.
-2. **{doc}`Tutorials <tutorials/index>`** — install it and make a robot
-   balance itself, step by step.
-3. **Package guides & reference** (below) — the deep detail on each tool.
-```
+New here and not sure? Read **[Tutorial 1: balance a cart-pole](tutorials/first-run-cartpole.md)** — it takes you from an empty shell to a working controller in about 15 minutes.
 
-## The pipeline
+---
 
-```text
- ┌─────────────────────┐   (A,B,C,D)   ┌────────────────────┐   K / K(s)   ┌──────────────────────┐
- │  urdf_state_space   │──────────────▶│ state_space_control│─────────────▶│ state_space_         │
- │  URDF → LTI plant   │   u_eq, q_eq  │  LQR·LQG·H∞·PID    │  controller  │ response_viz         │
- │  (Pinocchio,        │               │  plugin registry   │              │ RViz playback of the │
- │  analytic Jacobians)│               └────────────────────┘              │ closed-loop response │
- └─────────────────────┘                        ▲                          └──────────────────────┘
-            │                                   │                                      ▲
-            │            ┌──────────────────────┴────────────────────────┐             │
-            └───────────▶│         state_space_setup_assistant           │─────────────┘
-                         │  web wizard: load → validate → operating point│  RobotTrajectory
-                         │  → linearize → design → benchmark → export    │  (.npz interchange)
-                         └───────────────────────┬───────────────────────┘
-                                                 │ <name>_ros2_control.yaml
-                                                 ▼
-                         ┌───────────────────────────────────────────────┐
-                         │            kontrolem_controllers              │
-                         │  chainable ros2_control plugins (C++): load    │
-                         │  the exported gains, run LQR/LQG/H∞ realtime   │
-                         │  on mock · Gazebo Fortress · Isaac Sim         │
-                         └───────────────────────────────────────────────┘
-```
+## The four kinds of page (Diátaxis)
 
-Design happens offline in Python; deployment is a separate C++ runtime,
-{doc}`kontrolem_controllers <runtime/index>`, that loads the exported bundle and
-runs the controller under `ros2_control` — validated in **Gazebo Fortress** and
-**Isaac Sim** on the same cart–double-inverted-pendulum.
+This documentation is deliberately split into four types. Each page tells you at the top **who it's for** and **what it assumes**. We never blend them: tutorials and how-tos contain no design rationale (it links out), reference contains no teaching, explanation contains no step-by-step.
 
-Every module speaks one **canonical interchange format**,
-[`RobotTrajectory`](trajectory_format.md): producers write it (the linear
-closed-loop simulation today; nonlinear simulators, MuJoCo, rosbag /
-real-robot logs later), consumers read it (RViz playback, the wizard's
-response step, benchmark playback). Adding a producer or a consumer touches
-no existing code — see {doc}`architecture`.
+| Type | Answers | Read it when you want to… |
+|---|---|---|
+| **Tutorial** | "Teach me by doing." | Learn the system from zero via a guaranteed happy path. |
+| **How-to** | "How do I do X?" | Accomplish one specific task you already have in mind. |
+| **Reference** | "What exactly is X?" | Look up a parameter, signature, interface, or field. |
+| **Explanation** | "Why is it like this?" | Understand the architecture and the trade-offs. |
 
-## Packages
+---
 
-| Package | Role |
-|---|---|
-| {doc}`urdf_state_space <guides/urdf_state_space>` | URDF → linear state-space plant `(A,B,C,D)` by **analytic** linearization (Pinocchio `computeABADerivatives`), with gravity-compensation `u_eq`, actuation selection, exact ZOH discretization. |
-| {doc}`state_space_control <guides/state_space_control>` | Controller-synthesis toolbox: **LQR, LQG, H∞, PID** behind a `@register` plugin registry; also home of the canonical trajectory format, the excitation registry, and the closed-loop simulator. |
-| {doc}`state_space_setup_assistant <guides/setup_assistant>` | MoveIt-Setup-Assistant-style **web wizard**: load → validate → operating point → linearize → design → response → benchmark → export. |
-| {doc}`state_space_response_viz <guides/response_viz>` | Source-agnostic **RViz playback** of `RobotTrajectory` files with play/pause/seek/speed transport control. |
-| {doc}`kontrolem_example_robots <guides/example_robots>` | Example URDFs — the cart double inverted pendulum used throughout these docs. |
-| {doc}`kontrolem_controllers <runtime/index>` | **Runtime / deployment** (C++): chainable `ros2_control` plugins that load the exported LQR/LQG/H∞ bundle and run it realtime on mock, **Gazebo Fortress**, and Isaac Sim hardware. |
+## Tutorials
+Learning-oriented, zero prior knowledge, every step succeeds.
 
-## Where to start
+- **[Balance a cart-pole in 15 minutes](tutorials/first-run-cartpole.md)** — install, build, launch, watch it balance. Your first win.
+- **[Stand a quadruped with a whole-body controller](tutorials/stand-a-quadruped.md)** — a guided second session that reaches the flagship result and shows the same runtime hosting a very different controller.
 
-- Brand new to this? Read {doc}`the big ideas in plain words <concepts>`,
-  then do the {doc}`tutorials <tutorials/index>`.
-- Prefer a fast command-line tour? The {doc}`quickstart` runs the whole
-  pipeline in 5 minutes.
-- Want the design rationale? {doc}`architecture` explains the canonical
-  trajectory format and the clock × sampler × renderer playback model.
-- Building on top of it? {doc}`extending` shows how to add a controller,
-  an excitation, or a renderer in one file each; the normative
-  {doc}`trajectory_format` spec is what any new producer/consumer targets.
-- Ready to deploy on a robot? {doc}`runtime/index` covers the C++
-  `ros2_control` runtime that runs the exported controller, with physics
-  validation in {doc}`Gazebo <runtime/gazebo>` and {doc}`Isaac <runtime/isaac>`.
-- Looking for a specific function? See the {doc}`api/index`.
+## How-to guides
+Task-oriented recipes; assume you've done Tutorial 1.
 
-```{toctree}
-:hidden:
-:maxdepth: 2
-:caption: Start here
+- [Switch the control law (LQR ↔ QP ↔ LQG ↔ MPC)](how-to/switch-control-law.md)
+- [Follow a moving reference (Tracking)](how-to/track-a-moving-reference.md)
+- [Tune a controller's weights and limits](how-to/tune-a-controller.md)
+- [Read live diagnostics/telemetry](how-to/read-diagnostics.md)
+- [Run the framework on your own robot](how-to/run-on-your-robot.md)
+- [Configure a floating-base whole-body controller](how-to/configure-whole-body-control.md)
+- [Verify an integration (tests + e2e smoke)](how-to/verify-an-integration.md)
+- [Fix the cmeel / libboost load error](how-to/fix-cmeel-library-errors.md)
 
-concepts
-tutorials/index
-quickstart
-```
+## Reference
+Dry, complete, for lookup.
 
-```{toctree}
-:hidden:
-:maxdepth: 2
-:caption: Concepts
+- [Controller parameters](reference/controller-parameters.md)
+- [Control laws](reference/control-laws.md)
+- [Core C++ API (Layers 1–3)](reference/core-api.md)
+- [ros2_control interface conventions](reference/ros2control-interfaces.md)
+- [Demos & launch files](reference/demos.md)
+- [ControllerDiagnostics message](reference/diagnostics-message.md)
+- [Build & environment](reference/build-and-environment.md)
 
-architecture
-trajectory_format
-extending
-```
+## Explanation
+The why: architecture, decisions, trade-offs.
 
-```{toctree}
-:hidden:
-:maxdepth: 2
-:caption: Package guides
+- [Vision & scope](explanation/vision-and-scope.md)
+- [The four-layer architecture](explanation/architecture.md)
+- [The controller contract & lifecycle](explanation/controller-contract.md)
+- [Problem specs & dialects](explanation/problem-specs.md)
+- [State on a manifold & non-joint data](explanation/state-and-non-joint-data.md)
+- [Safety, the supervisor & real-time](explanation/safety-and-realtime.md)
+- [Design decisions, trade-offs & what's not done](explanation/design-decisions.md)
 
-guides/urdf_state_space
-guides/state_space_control
-guides/setup_assistant
-guides/response_viz
-guides/example_robots
-```
+---
 
-```{toctree}
-:hidden:
-:maxdepth: 2
-:caption: Runtime & deployment
-
-runtime/index
-```
-
-```{toctree}
-:hidden:
-:maxdepth: 2
-:caption: Reference
-
-api/index
-```
+*Status: the fixed-base framework (LQR/LQG/MPC/QP) and the floating-base standing WBC are implemented and validated end-to-end in simulation. Locomotion and hardware on a real quadruped are out of scope for this version — see [what's not done](explanation/design-decisions.md#whats-deliberately-not-done).*
