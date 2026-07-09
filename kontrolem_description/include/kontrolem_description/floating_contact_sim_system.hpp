@@ -55,6 +55,13 @@ private:
   bool commanding_{false};
   double base_height_{0.0};
   double kp_baum_{400.0}, kd_baum_{40.0};       // critically-damped contact stabilization
+
+  // Scheduled external base push (a disturbance for push-recovery demos): a base
+  // wrench applied for [push_time, push_time + push_duration) after the plant is
+  // released. All zero by default -> no push (the plain standing demo).
+  double push_time_{0.0}, push_duration_{0.0}, elapsed_{0.0};
+  Eigen::Vector3d push_force_{Eigen::Vector3d::Zero()};
+  bool push_logged_{false};
 };
 
 }  // namespace kontrolem_description

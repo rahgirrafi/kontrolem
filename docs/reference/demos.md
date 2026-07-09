@@ -12,6 +12,7 @@
 | `cart_double_pole.launch.py` | cart + double pole | `lqr` | `cart_double_pole_controllers.yaml` | Hard 3-DoF benchmark: one actuator, two passive poles (open-loop very unstable). |
 | `arm2.launch.py` | 2-DoF arm | `qp` | `arm2_controllers.yaml` | Online inverse-dynamics QP regulating a fully-actuated arm with an active torque limit. |
 | `quad_stand.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Whole-body QP stands a floating-base quadruped; base + contacts via `<gpio>`. |
+| `quad_push.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Same WBC standing, but the sim delivers a scheduled external base push (~2 s in); the WBC catches it and returns the base to nominal. |
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
 
 ## Shared launch body
