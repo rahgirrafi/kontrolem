@@ -64,6 +64,14 @@ CallbackReturn FloatingContactSimSystem::on_init(const hardware_interface::Hardw
   if (hp.count("baumgarte_kp")) kp_baum_ = std::stod(hp.at("baumgarte_kp"));
   if (hp.count("baumgarte_kd")) kd_baum_ = std::stod(hp.at("baumgarte_kd"));
 
+  // Optional scheduled push (disturbance): a base wrench over a time window.
+  push_time_ = hp.count("push_time") ? std::stod(hp.at("push_time")) : 0.0;
+  push_duration_ = hp.count("push_duration") ? std::stod(hp.at("push_duration")) : 0.0;
+  push_force_.setZero();
+  if (hp.count("push_fx")) push_force_.x() = std::stod(hp.at("push_fx"));
+  if (hp.count("push_fy")) push_force_.y() = std::stod(hp.at("push_fy"));
+  if (hp.count("push_fz")) push_force_.z() = std::stod(hp.at("push_fz"));
+
   // Standing configuration: base lifted to base_height, actuated joints seeded
   // from their <state_interface initial_value> (the nominal posture).
   q_ = model_->neutral();
@@ -174,6 +182,21 @@ return_type FloatingContactSimSystem::read(const rclcpp::Time &, const rclcpp::D
   // Actuated generalized force from the joint effort commands (base rows stay 0).
   tau_.setZero();
   for (std::size_t i = 0; i < joint_names_.size(); ++i) tau_(act_v_[i]) = jcmd_[i];
+
+  // Scheduled external base push: add the wrench to the base linear rows (0..2)
+  // during its window. The WBC sees only the resulting motion and must recover.
+  elapsed_ += dt;
+  if (push_duration_ > 0.0 && elapsed_ >= push_time_ &&
+      elapsed_ < push_time_ + push_duration_) {
+    tau_(0) += push_force_.x();
+    tau_(1) += push_force_.y();
+    tau_(2) += push_force_.z();
+    if (!push_logged_) {
+      RCLCPP_INFO(logger(), "external push (%.0f, %.0f, %.0f) N at t=%.2fs",
+                  push_force_.x(), push_force_.y(), push_force_.z(), elapsed_);
+      push_logged_ = true;
+    }
+  }
 
   // Contact-constrained forward dynamics: the feet stay pinned (this is the
   // ground). Baumgarte keeps them at the anchors despite integration drift.

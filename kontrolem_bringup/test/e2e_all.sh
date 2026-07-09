@@ -22,6 +22,12 @@ for row in "${CASES[@]}"; do
   if bash "$SMOKE" "${A[@]}" | tail -1; then :; else fails=$((fails+1)); fi
 done
 
+# Push-recovery has its own metric (base deviates during the push, then returns —
+# read from ControllerDiagnostics), so it uses e2e_push.sh rather than the joint-
+# settle smoke test.
+printf '  %-32s %-16s ' "quad_push.launch.py" "push-recovery"
+if bash "$HERE/e2e_push.sh" | tail -1; then :; else fails=$((fails+1)); fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "E2E SMOKE: ALL PASS"; exit 0
 else echo "E2E SMOKE: $fails FAILED"; exit 1; fi

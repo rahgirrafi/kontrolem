@@ -64,6 +64,9 @@ All three hold the plant at its initial state until a controller claims the effo
 | `base_height` | double | `0.0` | Nominal base z at start. |
 | `baumgarte_kp` | double | `400.0` | Contact position-stabilization gain. |
 | `baumgarte_kd` | double | `40.0` | Contact velocity-stabilization gain. |
+| `push_time` | double | `0.0` | Start time (s, after the plant is released) of a scheduled external base push. |
+| `push_duration` | double | `0.0` | Push duration (s). `0` ⇒ no push. |
+| `push_fx`, `push_fy`, `push_fz` | double | `0.0` | Base push force (N) applied during the window (base linear rows). |
 
 ## Joint `initial_value`
 
