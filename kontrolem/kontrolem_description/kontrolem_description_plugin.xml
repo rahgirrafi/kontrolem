@@ -17,4 +17,14 @@
       &lt;gpio&gt; block, to test non-joint state through ros2_control.
     </description>
   </class>
+  <class name="kontrolem_description/FloatingContactSimSystem"
+         type="kontrolem_description::FloatingContactSimSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Standing-WBC simulation hardware (M4): integrates CONTACT-CONSTRAINED
+      floating-base dynamics (feet pinned = the ground) and exports the base
+      pose/twist plus per-foot contact scalars on &lt;gpio&gt; blocks, so a QP-WBC
+      can hold the robot up end-to-end without Gazebo.
+    </description>
+  </class>
 </library>

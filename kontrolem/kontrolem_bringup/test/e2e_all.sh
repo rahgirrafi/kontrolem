@@ -6,19 +6,20 @@
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SMOKE="$HERE/e2e_smoke.sh"
 
-# each row: launch file | joint to watch | settle threshold
+# each row: launch | joint | threshold [| settle | run | target]  (see e2e_smoke.sh)
 CASES=(
-  "cart_pole.launch.py|pole_joint|0.05"          # LQR, cart-pole
-  "cart_pole_lqg.launch.py|pole_joint|0.05"      # LQG, output feedback
-  "cart_double_pole.launch.py|pole1_joint|0.05"  # LQR, hard 3-DoF benchmark
-  "arm2.launch.py|shoulder_joint|0.05"           # QP task-space, 2-DoF arm
+  "cart_pole.launch.py|pole_joint|0.05"              # LQR, cart-pole
+  "cart_pole_lqg.launch.py|pole_joint|0.05"          # LQG, output feedback
+  "cart_double_pole.launch.py|pole1_joint|0.05"      # LQR, hard 3-DoF benchmark
+  "arm2.launch.py|shoulder_joint|0.05"               # QP task-space, 2-DoF arm
+  "quad_stand.launch.py|knee_FL|0.2|9|14|-1.4"       # QP-WBC, quadruped standing
 )
 
 fails=0
 for row in "${CASES[@]}"; do
-  IFS='|' read -r launch joint thr <<< "$row"
-  printf '  %-32s %-16s ' "$launch" "$joint"
-  if bash "$SMOKE" "$launch" "$joint" "$thr" | tail -1; then :; else fails=$((fails+1)); fi
+  IFS='|' read -ra A <<< "$row"
+  printf '  %-32s %-16s ' "${A[0]}" "${A[1]}"
+  if bash "$SMOKE" "${A[@]}" | tail -1; then :; else fails=$((fails+1)); fi
 done
 
 echo

@@ -58,6 +58,14 @@ if(BUILD_TESTING)
     FLOATING_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_biped.urdf")
   add_test(NAME contact_jacobian COMMAND test_contact_jacobian)
 
+  # Contact-constrained dynamics (M4): stacked contact Jacobian/drift, residual
+  # DoF of the pinned-foot quadruped, and the contact "ground" holding a stance.
+  add_executable(test_contact_dynamics test/test_contact_dynamics.cpp)
+  target_link_libraries(test_contact_dynamics kontrolem_model)
+  target_compile_definitions(test_contact_dynamics PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_quadruped.urdf")
+  add_test(NAME contact_dynamics COMMAND test_contact_dynamics)
+
   # rollout + linearize_along (M2.5 LTV/prediction model queries).
   add_executable(test_rollout test/test_rollout.cpp)
   target_link_libraries(test_rollout kontrolem_model)

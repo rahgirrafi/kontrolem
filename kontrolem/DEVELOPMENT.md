@@ -479,6 +479,90 @@ supervisor, exact MPC discretization, documented, proven on cart-double-pole).
 
 ---
 
+## M4 — QP-WBC (standing), in progress
+
+The flagship. Building it de-risk-first (prove the physics offline before ROS).
+
+- `[x]` **M4.1 — contact-constrained dynamics in the model layer + a standing
+  platform, proven offline.** Three realizations drove this:
+  1. The floating sim **free-falls** (`aba`, no ground). A standing demo needs
+     *contact-constrained* forward dynamics — feet pinned — or no torque can hold
+     the robot up. Added `RobotModel::contact_forward_dynamics` (KKT
+     `[M −Jᵀ; J 0][q̈; λ] = [τ−h; −γ−Baumgarte]` solved via a **damped Schur
+     complement**, so redundant contacts stay well-posed), plus the RT building
+     blocks `contact_jacobian_stacked` (3·nc×nv) and `contact_drift` (γ = d/dt(J)·v
+     via frame classical acceleration). Also `joint_q_index`/`joint_v_index` (name
+     → generalized-coordinate index — the WBC's actuation-selection Sᵀ needs it).
+  2. A **1-DoF-leg** quad is *locked rigid* when 4 feet are pinned (each single-axis
+     leg moves its foot on a 1D arc ⇒ 4 feet over-constrain the 10-DoF system ⇒ 0
+     residual base DoF ⇒ nothing to balance). So a point-foot balancer needs
+     richer legs.
+  3. Fix: **`robots/floating_quadruped.urdf`** — 3-DoF legs (hip-roll x, hip-pitch
+     y, knee y), the Go2's structure shrunk. nq=19, nv=18; with 4 feet pinned the
+     base retains **6 residual DoF** (nv − rank J = 18 − 12) — the WBC actively
+     stabilizes the trunk. (The 1-DoF `floating_biped` stays as the M3 model-test
+     fixture.)
+  - **Offline proof** `test_contact_dynamics` (kontrolem_model, **15 tests green**):
+    A stacked-J == per-foot J (err 0); B drift(v=0)=0; C **residual DoF = 6**
+    (platform WBC-viable, not locked); D full gravity-comp ⇒ static equilibrium
+    holds (base_dz=0, feet don't move over 2 s); E under a brief hip-torque impulse
+    the **feet stay planted to 0.4 mm** (critically-damped Baumgarte, ω≈20 rad/s)
+    while the base moves freely — exactly the feet-planted-base-free regime the WBC
+    operates in. The contact "ground" is validated before any ROS wiring.
+- `[x]` **M4.2 — `ContactSensor` semantic component** (mirrors `BaseStateSensor`):
+  per-foot contact scalars on a `<gpio>` (`contact.<foot>`), `read_into` /
+  `stance_into`. Owns the contact interface-naming convention. Compiles as part of
+  `kontrolem_ros2_control`; exercised end-to-end at M4.4.
+- `[x]` **M4.3 — `WbcController`** (`kontrolem_controllers`, like MpcController — a
+  flagged B10 deviation): inverse-dynamics QP over `z = [q̈; λ; τ]` (nz=42 for the
+  quad) — dynamics equality `M q̈ + h = Sᵀτ + Jᵀλ`, no-slip contact `J q̈ = −γ`,
+  friction **pyramid** + unilateral, torque limits; cost = frame-consistent PD task
+  (`q̈_des = −Kp(q ⊖ q_ref) − Kd v`, base-weighted) + force/torque regularization.
+  Reuses the `QpSolver`/OSQP seam (added an optional `eps`; WBC uses 1e-4 — a WBC
+  solves for forces in newtons, 1e-6 is absurd and left transient ticks
+  `SOLVED_INACCURATE`). Accepts the **Regulation** dialect — a quadruped under a
+  QP-WBC and a cart-pole under a gain flow through the *same* `compute(state,
+  problem, dt)`. **Offline proof** `test_wbc_standing`: closed-loop against the
+  model's own `contact_forward_dynamics` (the plant), the WBC **holds the stance to
+  1e-6, recovers from a 43 N base push to 1.3e-6** (base pose + twist), feet planted
+  to 2e-5, **0 solver hiccups**, torque + friction-pyramid respected. **All 15
+  tests green** (5 model + 10 controllers), no regressions.
+  - **Part-D QP-RT finding (T2, confirmed then resolved):** at eps=1e-6 the ADMM QP
+    returned `SOLVED_INACCURATE` on 27 transient ticks right after the push (none
+    during the static hold); the WBC-appropriate eps=1e-4 cleared all of them. The
+    status margin measures the **pyramid** cone actually enforced (not a circular
+    one — an early metric bug). `difference()` in compute() still allocates — noted
+    for the WBC RT-allocation audit (the D4 item, deferred).
+- `[x]` **M4.4 — ros2_control wiring, e2e GREEN.** The WBC stands the quadruped
+  through the full stack, no Gazebo:
+  - **`FloatingContactSimSystem`** (kontrolem_description) — the standing plant:
+    integrates `contact_forward_dynamics` (feet pinned = ground, Baumgarte),
+    exports the SE(3) base (13 `<gpio>` scalars) + per-foot **contact scalars**
+    (=1, ground-truth stance), holds the posture until a controller commands it
+    (D11). `urdf/floating_quadruped.ros2_control.urdf` (generated).
+  - **`KontrolemController` floating-base path** (behind `base_type: floating`,
+    fixed path untouched): claims actuated joints + base `<gpio>` (BaseStateSensor)
+    + contact `<gpio>` (ContactSensor), assembles the SE(3) `State` (base by sensor,
+    joints by generalized index), builds the standing `Regulation` q_ref by joint
+    index; `"wbc"` added to `make_law`.
+  - **`config/quad_stand_controllers.yaml` + `quad_stand.launch.py`** (reuse
+    `build_sim_launch`); `e2e_smoke.sh` gained an optional target (WBC settles to a
+    non-zero nominal, not 0); quad added to `e2e_all.sh`.
+  - **Verified live:** controller `active`, `control_law: wbc`, sim "released"
+    (actively integrating), `ok: true`, friction **margin 14.5 N**, compute
+    **~462 µs/tick** (well inside the 2 ms budget at 500 Hz). **e2e suite ALL PASS
+    (5 demos: LQR/LQG/QP + hard 3-DoF + WBC quad).** Scheduled all-stance, no
+    locomotion (Part D).
+
+**M4 (standing WBC) is complete.** ONE `KontrolemController` runtime now hosts five
+paradigms across fixed and floating base — a cart-pole under a stored gain and a
+quadruped under a contact-aware QP flow through the identical `compute(state,
+problem, dt)`. The plan's M4 acceptance ("stands + rejects a bounded push") is met:
+standing is proven e2e, push-recovery offline (43 N → 1.3e-6). Deferred (Part D):
+multi-controller/gait transitions (M4.5), the real Go2, the WBC RT-allocation audit.
+
+---
+
 ## Update policy
 
 I propose a step change (in § Proposed step updates) whenever: a dependency or

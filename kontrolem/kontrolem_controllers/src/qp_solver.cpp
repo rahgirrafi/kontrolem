@@ -82,7 +82,7 @@ QpSolver::~QpSolver() = default;
 
 void QpSolver::setup(
   const Eigen::MatrixXd & P, const Eigen::MatrixXd & A, const Eigen::VectorXd & q,
-  const Eigen::VectorXd & l, const Eigen::VectorXd & u)
+  const Eigen::VectorXd & l, const Eigen::VectorXd & u, double eps)
 {
   auto & im = *impl_;
   im.nz = static_cast<int>(P.rows());
@@ -112,8 +112,8 @@ void QpSolver::setup(
   osqp_set_default_settings(&settings);
   settings.verbose = 0;
   settings.warm_start = 1;
-  settings.eps_abs = 1e-6;      // tight tolerance -> crisp constraint satisfaction
-  settings.eps_rel = 1e-6;
+  settings.eps_abs = eps;       // tolerance -> constraint satisfaction (caller-tuned)
+  settings.eps_rel = eps;
   // Control-loop config: no polish (it factorizes a reduced KKT each solve) and
   // fixed rho (adaptive rho refactorizes the KKT) -> far less per-tick malloc.
   settings.polish = 0;

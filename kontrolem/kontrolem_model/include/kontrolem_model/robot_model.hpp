@@ -148,6 +148,37 @@ public:
   /// constraints and contact-force terms Jᵀλ. Throws if the frame is absent.
   Eigen::MatrixXd contact_jacobian(const Eigen::VectorXd & q, const std::string & frame) const;
 
+  /// Real-time stacked translational contact Jacobian (3·nc × nv) for the named
+  /// contact frames, world-aligned, using the caller's Workspace. Row block k is
+  /// the 3×nv Jacobian of feet[k]. Writes into the caller's `J_out` (resized if
+  /// needed). Throws if any frame is absent.
+  void contact_jacobian_stacked(
+    Workspace & ws, const Eigen::VectorXd & q, const std::vector<std::string> & feet,
+    Eigen::MatrixXd & J_out) const;
+
+  /// Real-time stacked contact "drift" γ = d/dt(J)·v (3·nc) — the frame
+  /// classical acceleration at zero joint acceleration. The WBC's no-slip
+  /// contact constraint is J·q̈ = −γ; a contact-constrained simulator uses the
+  /// same term. Writes into the caller's `gamma_out`.
+  void contact_drift(
+    Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
+    const std::vector<std::string> & feet, Eigen::VectorXd & gamma_out) const;
+
+  /// Contact-constrained forward dynamics: the acceleration q̈ that keeps the
+  /// named feet fixed (point contacts, no slip) under generalized force `tau`,
+  /// with optional Baumgarte position/velocity stabilization toward `anchors`
+  /// (empty ⇒ pure acceleration-level constraint). Solves the KKT system
+  ///   [M −Jᵀ; J 0][q̈; λ] = [tau−h; −γ − Baumgarte]
+  /// via the (damped) Schur complement — so redundant contacts (a rigid body on
+  /// >2 feet) stay well-posed. This is the "ground" a floating-base standing
+  /// simulator needs; without it the base free-falls under aba(). If
+  /// `lambda_out` is non-null it receives the 3·nc world-aligned contact forces.
+  Eigen::VectorXd contact_forward_dynamics(
+    Workspace & ws, const Eigen::VectorXd & q, const Eigen::VectorXd & v,
+    const Eigen::VectorXd & tau, const std::vector<std::string> & feet,
+    const std::vector<Eigen::Vector3d> & anchors, double baumgarte_kp, double baumgarte_kd,
+    Eigen::VectorXd * lambda_out = nullptr) const;
+
   /// Manifold-correct configuration update: q_next = q ⊕ (v · dt). For a fixed
   /// base this is q + v·dt; for a floating base it integrates the SE(3) root on
   /// its group (quaternion stays unit), which a naive q + v·dt would corrupt.
@@ -159,9 +190,22 @@ public:
   /// floating-base q (the quaternion would be zero, not unit).
   Eigen::VectorXd neutral() const;
 
+  /// Manifold difference: the tangent vector d (nv) such that integrate(q0, d)==q1
+  /// — i.e. "q1 ⊖ q0". For a floating base this is the SE(3) log of the relative
+  /// pose (not q1 − q0), so it lives in the same tangent space as v and q̈. This
+  /// is how a WBC forms a frame-consistent configuration error for its PD task.
+  Eigen::VectorXd difference(const Eigen::VectorXd & q0, const Eigen::VectorXd & q1) const;
+
   int nq() const;
   int nv() const;
   const std::vector<std::string> & joint_names() const;
+
+  /// Index into the configuration vector q of a named joint's first DoF (the
+  /// tangent/velocity index for v). Throws if the joint is absent. Lets a
+  /// controller map actuated joint names to generalized-force rows (the
+  /// actuation selection Sᵀ) and address specific joints in q/v.
+  int joint_q_index(const std::string & name) const;
+  int joint_v_index(const std::string & name) const;
 
 private:
   RobotModel();
