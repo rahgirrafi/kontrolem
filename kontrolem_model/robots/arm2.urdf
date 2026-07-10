@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!-- 2-DoF fully-actuated planar arm (shoulder + elbow, both revolute about y),
+     body-only URDF for the model/tests (the ros2_control wiring lives in
+     kontrolem_description/urdf/arm2.ros2_control.urdf). Both links are thin rods
+     of length 1 m, mass 1 kg, in the x-z plane under gravity. Angle 0 = link along
+     +x (horizontal), so the gravity load g(q) and inertia M(q) vary strongly with
+     configuration — the operating envelope that motivates gain-scheduling / LPV. -->
+<robot name="arm2">
+  <link name="base_link"/>
+
+  <joint name="shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="100" velocity="100" lower="-3.14" upper="3.14"/>
+  </joint>
+
+  <link name="link1">
+    <inertial>
+      <origin xyz="0.5 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.0833" iyz="0" izz="0.0833"/>
+    </inertial>
+  </link>
+
+  <joint name="elbow_joint" type="revolute">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="100" velocity="100" lower="-3.14" upper="3.14"/>
+  </joint>
+
+  <link name="link2">
+    <inertial>
+      <origin xyz="0.5 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.0833" iyz="0" izz="0.0833"/>
+    </inertial>
+  </link>
+</robot>

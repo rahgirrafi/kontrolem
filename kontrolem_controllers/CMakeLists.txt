@@ -15,6 +15,7 @@ find_package(osqp REQUIRED)
 
 add_library(kontrolem_controllers SHARED
   src/lqr_controller.cpp
+  src/lpv_controller.cpp
   src/lqg_controller.cpp
   src/mpc_controller.cpp
   src/qp_solver.cpp
@@ -121,6 +122,12 @@ if(BUILD_TESTING)
   target_compile_definitions(test_supervisor_recover PRIVATE
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME supervisor_recover COMMAND test_supervisor_recover)
+
+  add_executable(test_lpv_arm test/test_lpv_arm.cpp)
+  target_link_libraries(test_lpv_arm kontrolem_controllers)
+  target_compile_definitions(test_lpv_arm PRIVATE
+    ARM2_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/arm2.urdf")
+  add_test(NAME lpv_arm COMMAND test_lpv_arm)
 
   add_executable(test_allocation test/test_allocation.cpp)
   target_link_libraries(test_allocation kontrolem_controllers)
