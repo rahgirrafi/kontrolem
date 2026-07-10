@@ -1,0 +1,13 @@
+<library path="kontrolem_state_bridge">
+  <class name="kontrolem_state_bridge/OdometryBaseBridge"
+         type="kontrolem_state_bridge::OdometryBaseBridge"
+         base_class_type="hardware_interface::SensorInterface">
+    <description>
+      ros2_control SensorInterface that subscribes to a base odometry topic
+      (nav_msgs/Odometry) and re-exports it as the 13 floating-base scalar state
+      interfaces on a &lt;gpio&gt; block, so base pose/twist from a non-custom
+      producer (Gazebo ground truth, or a real estimator) enters the RT loop as
+      claimable state interfaces exactly as BaseStateSensor expects.
+    </description>
+  </class>
+</library>

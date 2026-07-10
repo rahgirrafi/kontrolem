@@ -16,6 +16,7 @@
 #include "kontrolem_model/robot_model.hpp"
 #include "kontrolem_ros2_control/base_state_sensor.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 
 namespace kontrolem_ros2_control
 {
@@ -36,8 +37,20 @@ private:
   std::optional<kontrolem_model::RobotModel> model_;
   kontrolem_control::State state_;
   std::optional<BaseStateSensor> base_sensor_;      // encapsulates base reassembly
-  std::vector<std::string> joint_names_;            // actuated joints (no root)
+  std::vector<std::string> joint_names_;            // actuated joints (no root); may be empty (base-only)
   std::vector<std::size_t> jpos_idx_, jvel_idx_;    // per actuated joint
+
+  // Frame-consistency self-check (M6.3): predict this tick's configuration by
+  // manifold-integrating the previous reassembled (q,v) and compare to the newly
+  // reassembled q. A large residual means the producer's twist frame / quaternion
+  // order disagrees with Pinocchio's free-flyer — the exact convention risk the
+  // Gazebo round-trip exists to catch. Published on ~/base_state so an e2e can
+  // assert it. Layout: [pos(3), quat xyzw(4), lin(3), ang(3), quat_norm,
+  // frame_residual, com(3)] = 16 doubles.
+  Eigen::VectorXd prev_q_, prev_v_;
+  bool have_prev_ = false;
+  double max_frame_resid_ = 0.0;
+  std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float64MultiArray>> pub_;
 };
 
 }  // namespace kontrolem_ros2_control

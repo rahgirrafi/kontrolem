@@ -1,0 +1,18 @@
+# M6.3 base-state round-trip: a controller_manager whose ONLY hardware is the
+# OdometryBaseBridge sensor (base pose/twist from Gazebo over /base_odom). No
+# joints, so no joint_state_broadcaster — just the base-only FloatingStateProbe,
+# which reassembles a manifold State from the bridged interfaces and publishes a
+# frame-consistency residual on ~/base_state.
+controller_manager:
+  ros__parameters:
+    update_rate: 200
+
+    floating_state_probe:
+      type: kontrolem_ros2_control/FloatingStateProbe
+
+floating_state_probe:
+  ros__parameters:
+    base_gpio: floating_base
+    # 'joints' is intentionally omitted: an empty YAML list ([]) is untyped in
+    # ROS 2 and makes as_string_array() throw, so we rely on the controller's
+    # typed empty-vector default -> base-only (no actuated joints).

@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!-- M6.3 base-state round-trip: control-side description of a single free-floating
+     body whose base pose/twist arrives from GAZEBO (not our custom sim) over an
+     odometry topic. The only ros2_control hardware is a SENSOR component,
+     OdometryBaseBridge, which re-exports the odometry as the 13 floating_base
+     scalar state interfaces — there are NO actuated joints and NO IgnitionSystem
+     here: base state flows purely through the topic bridge, so the FloatingStateProbe
+     reassembles a manifold State from a non-custom producer. Pinocchio builds a
+     free-flyer from this single link (nq=7, nv=6); the frame-consistency check the
+     probe runs is kinematic, so the exact inertia need not match Gazebo's. -->
+<robot name="floating_box">
+  <link name="base">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <!-- box 0.3 x 0.2 x 0.1: Ixx=m/12*(0.2^2+0.1^2), etc. (informational only) -->
+      <inertia ixx="0.00417" ixy="0" ixz="0" iyy="0.00833" iyz="0" izz="0.01083"/>
+    </inertial>
+    <visual>
+      <geometry><box size="0.3 0.2 0.1"/></geometry>
+    </visual>
+  </link>
+
+  <!-- Base-state bridge: subscribes to Gazebo's ground-truth odometry and exports
+       the 13 base scalars in the BaseStateSensor convention (pose then twist). -->
+  <ros2_control name="base_state" type="sensor">
+    <hardware>
+      <plugin>kontrolem_state_bridge/OdometryBaseBridge</plugin>
+      <param name="topic">/base_odom</param>
+    </hardware>
+    <gpio name="floating_base">
+      <state_interface name="pose.position.x"/>
+      <state_interface name="pose.position.y"/>
+      <state_interface name="pose.position.z"/>
+      <state_interface name="pose.orientation.x"/>
+      <state_interface name="pose.orientation.y"/>
+      <state_interface name="pose.orientation.z"/>
+      <state_interface name="pose.orientation.w"/>
+      <state_interface name="twist.linear.x"/>
+      <state_interface name="twist.linear.y"/>
+      <state_interface name="twist.linear.z"/>
+      <state_interface name="twist.angular.x"/>
+      <state_interface name="twist.angular.y"/>
+      <state_interface name="twist.angular.z"/>
+    </gpio>
+  </ros2_control>
+</robot>

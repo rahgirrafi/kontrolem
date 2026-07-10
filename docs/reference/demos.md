@@ -18,6 +18,7 @@
 | `quad_push.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Same WBC standing, but the sim delivers a scheduled external base push (~2 s in); the WBC catches it and returns the base to nominal. |
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
 | `cart_pole_gz.launch.py` | cart-pole | `lqr` | `cart_pole_controllers.yaml` | **Independent-physics validation:** the SAME LQR + config, but the plant is **Gazebo Fortress** (`ign_ros2_control`) instead of the custom sim — proof the substrate is swappable with zero controller change (see below). Needs Gazebo installed. |
+| `floating_box_gz.launch.py` | floating body | *(probe, not a law)* | `floating_box_gz_controllers.yaml` | **Base-state from Gazebo:** a free body's ground-truth odometry is bridged into the 13 `floating_base` state interfaces (via `kontrolem_state_bridge`) and the probe reassembles a manifold State — non-joint base state from a non-custom producer, zero controller change (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -68,6 +69,19 @@ bash kontrolem_bringup/test/e2e_cart_pole_gz.sh          # automated pass/fail
 ```
 
 Requires Gazebo Fortress + `ign_ros2_control` installed. One honest caveat vs. the custom sim: Gazebo's timestep/solver aren't exact-tick reproducible, so this e2e asserts tolerance/settle bands (pole kicked but in-basin, then returns to upright), while the deterministic custom-sim e2es remain the tight regression. It is **not** part of `e2e_all.sh` (Gazebo is heavy and a separate dependency).
+
+## Base-state from Gazebo (`floating_box_gz`)
+
+`cart_pole_gz` proves a *joint*-space plant is swappable. `floating_box_gz` proves the harder, **non-joint** case: a floating base's pose/twist entering the RT loop from an independent producer. `ros2_control` has no floating-base concept and Gazebo's `IgnitionSystem` (like a real robot) only exports *joints*, so the base state arrives a different way — over a topic, through **`kontrolem_state_bridge`**'s `OdometryBaseBridge`, a `SensorInterface` that re-exports `nav_msgs/Odometry` as the 13 `floating_base/*` state interfaces. The **same** `BaseStateSensor`/`FloatingStateProbe` reassembly used with the custom `FloatingBaseSimSystem` then rebuilds a manifold-correct SE(3) `State` — only the producer swapped (Gazebo ground truth instead of our sim), zero controller change. Notably this needs **no `gz_ros2_control`**: the controller_manager runs standalone and its only hardware is the topic bridge.
+
+A free body is dropped **tilted** in Gazebo; its `odometry-publisher` emits world-frame pose + body-frame twist (matching Pinocchio's free-flyer). The tilt is deliberate — it makes the body-frame velocity differ from the world-frame one, so an independent SE(3) forward-integration of the odometry stream actually *discriminates* whether the twist frame is right (it is: prediction error ≈1 mm, vs ≈16 cm if the frame were wrong).
+
+```bash
+ros2 launch kontrolem_bringup floating_box_gz.launch.py   # headless (server-only)
+bash kontrolem_bringup/test/e2e_floating_box_gz.sh        # automated pass/fail
+```
+
+Requires Gazebo Fortress + `ros_gz_bridge` installed. Like `cart_pole_gz`, it is **not** part of `e2e_all.sh` (heavy + separate dependency). This is the stepping-stone toward the real-Go2 path, where the same bridge consumes an external estimator (InEKF) instead of Gazebo ground truth.
 
 ## Shared launch body
 
