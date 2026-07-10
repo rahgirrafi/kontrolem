@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!-- M6.3 world: a single free body dropped under gravity while TILTED, with the
+     Gazebo odometry-publisher exporting its ground-truth base pose/twist. The tilt
+     is deliberate: a tilted free-fall makes the body-frame linear velocity differ
+     from the world-frame one, so the controller-side frame-consistency check
+     actually discriminates whether the odometry twist is body-frame (as Pinocchio's
+     free-flyer expects). No ground plane, so the fall — and thus the base motion —
+     lasts the whole capture. Physics at 200 Hz to match the controller rate. -->
+<sdf version="1.8">
+  <world name="floating_box">
+    <physics name="200hz" type="ignored">
+      <max_step_size>0.005</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+
+    <gravity>0 0 -9.81</gravity>
+
+    <light type="directional" name="sun">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Start tilted (roll 0.6 rad) and high; free-fall with constant orientation. -->
+    <model name="floating_box">
+      <pose>0 0 5 0.6 0 0</pose>
+      <link name="base_link">
+        <inertial>
+          <mass>1.0</mass>
+          <inertia>
+            <ixx>0.00417</ixx><iyy>0.00833</iyy><izz>0.01083</izz>
+            <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <visual name="visual">
+          <geometry><box><size>0.3 0.2 0.1</size></box></geometry>
+        </visual>
+        <collision name="collision">
+          <geometry><box><size>0.3 0.2 0.1</size></box></geometry>
+        </collision>
+      </link>
+
+      <!-- Ground-truth odometry: full 3D pose (world) + twist (base/body frame),
+           published on the ign topic /base_odom, bridged to ROS by the launch. -->
+      <plugin filename="ignition-gazebo-odometry-publisher-system"
+              name="ignition::gazebo::systems::OdometryPublisher">
+        <dimensions>3</dimensions>
+        <odom_frame>world</odom_frame>
+        <robot_base_frame>base_link</robot_base_frame>
+        <odom_topic>/base_odom</odom_topic>
+        <odom_publish_frequency>200</odom_publish_frequency>
+      </plugin>
+    </model>
+  </world>
+</sdf>

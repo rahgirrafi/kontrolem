@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_state_bridge</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 base-state bridge: a ros2_control SensorInterface that turns a
+    base odometry topic (nav_msgs/Odometry) into the 13 floating-base scalar state
+    interfaces on a &lt;gpio&gt; block, so non-joint base pose/twist from a
+    non-custom producer (Gazebo ground truth or an external estimator) can be
+    claimed as ordinary state interfaces (Part B4 of the v2 plan).
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>realtime_tools</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
