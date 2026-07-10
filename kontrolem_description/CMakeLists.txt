@@ -32,6 +32,7 @@ pluginlib_export_plugin_description_file(hardware_interface kontrolem_descriptio
 
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY worlds DESTINATION share/${PROJECT_NAME})
 install(TARGETS kontrolem_description
   EXPORT export_kontrolem_description
   LIBRARY DESTINATION lib

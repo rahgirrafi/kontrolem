@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<!-- Cart-pole for the M6.1 INDEPENDENT-PHYSICS validation (Gazebo Fortress).
+     Same body as cart_pole.ros2_control.urdf, but the plant is Gazebo's own
+     physics engine instead of CartPoleSimSystem: the <ros2_control> hardware is
+     ign_ros2_control/IgnitionSystem and a <gazebo> tag boots the controller_manager
+     INSIDE gz-sim. The controller (KontrolemController) and its config are UNCHANGED
+     — that swap-with-zero-controller-change is exactly what this demo proves.
+
+     The base is pinned to the world (world -> fixed -> base_link) so the cart-pole
+     hangs in space and never touches the ground; the cart slides on the prismatic
+     joint, the pole swings free (no command interface = unactuated). Placeholders
+     __CTRL_YAML__ / __DESC_YAML__ are substituted with real paths by the launch. -->
+<robot name="cart_pole">
+  <!-- gz-sim treats a link named "world" as the world frame. The cart slides on a
+       prismatic joint whose parent IS the world (fixed base, no fixed-joint-to-world
+       lumping to break the model), 1 m up so the mechanism hangs clear of the ground. -->
+  <link name="world"/>
+
+  <joint name="cart_joint" type="prismatic">
+    <parent link="world"/>
+    <child link="cart"/>
+    <origin xyz="0 0 1.0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="1000" velocity="100" lower="-10" upper="10"/>
+  </joint>
+
+  <link name="cart">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.0067" ixy="0" ixz="0" iyy="0.0067" iyz="0" izz="0.0067"/>
+    </inertial>
+    <visual>
+      <geometry><box size="0.3 0.2 0.15"/></geometry>
+      <material name="cart_mat"><color rgba="0.2 0.4 0.8 1"/></material>
+    </visual>
+  </link>
+
+  <joint name="pole_joint" type="revolute">
+    <parent link="cart"/>
+    <child link="pole"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- Unactuated: no command interface below. Nonzero effort limit only so gz
+         does not treat the joint as locked; nothing drives it. -->
+    <limit effort="1000" velocity="100" lower="-3.15" upper="3.15"/>
+  </joint>
+
+  <link name="pole">
+    <inertial>
+      <origin xyz="0 0 0.5" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.00833" ixy="0" ixz="0" iyy="0.00833" iyz="0" izz="0.00001"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.25" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.02" length="0.5"/></geometry>
+      <material name="pole_mat"><color rgba="0.9 0.5 0.1 1"/></material>
+    </visual>
+  </link>
+
+  <!-- ros2_control: Gazebo Sim system hardware (same joints/interfaces as the
+       custom-sim URDF; only the <plugin> differs). -->
+  <ros2_control name="cart_pole_gz" type="system">
+    <hardware>
+      <plugin>ign_ros2_control/IgnitionSystem</plugin>
+    </hardware>
+
+    <joint name="cart_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+
+    <!-- Pole is UNACTUATED (no command interface). It starts upright (0) and holds
+         there until LQR is active; the test then applies a torque disturbance (via the
+         world's ApplyLinkWrench system) and checks LQR drives it back to upright. -->
+    <joint name="pole_joint">
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+
+  <!-- Boot the ros2_control controller_manager inside gz-sim. __CTRL_YAML__ is the
+       UNCHANGED cart_pole_controllers.yaml; __DESC_YAML__ carries just the
+       controller's robot_description (Humble's controller base can't fetch it). -->
+  <gazebo>
+    <plugin filename="ign_ros2_control-system"
+            name="ign_ros2_control::IgnitionROS2ControlPlugin">
+      <parameters>__CTRL_YAML__</parameters>
+      <parameters>__DESC_YAML__</parameters>
+      <controller_manager_name>controller_manager</controller_manager_name>
+    </plugin>
+  </gazebo>
+</robot>

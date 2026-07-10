@@ -17,6 +17,7 @@
 | `quad_stand.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Whole-body QP stands a floating-base quadruped; base + contacts via `<gpio>`. |
 | `quad_push.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Same WBC standing, but the sim delivers a scheduled external base push (~2 s in); the WBC catches it and returns the base to nominal. |
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
+| `cart_pole_gz.launch.py` | cart-pole | `lqr` | `cart_pole_controllers.yaml` | **Independent-physics validation:** the SAME LQR + config, but the plant is **Gazebo Fortress** (`ign_ros2_control`) instead of the custom sim — proof the substrate is swappable with zero controller change (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -54,6 +55,19 @@ The `cart_pole_autorecover` demo shows the full round trip: the shove trips LQR 
 ros2 launch kontrolem_bringup cart_pole_autorecover.launch.py
 ros2 topic echo /kontrolem_controller/diagnostics   # control_law: lqr -> mpc -> lqr
 ```
+
+## Independent-physics validation with Gazebo (`cart_pole_gz`)
+
+Every other demo uses a custom `SystemInterface` sim (`CartPoleSimSystem`, `FloatingContactSimSystem`) that integrates the plant with the **same** Pinocchio model the controllers use — deterministic and dependency-light, but it "marks its own homework" (it can't catch model mismatch or real contact). `cart_pole_gz` closes that gap: the plant is **Gazebo Fortress**'s own physics engine.
+
+Because the controllers only ever see ros2_control `State`/`Command` interfaces, the plant behind them is swappable with **zero controller change** — `cart_pole_gz` runs the *identical* `KontrolemController` (LQR) binary and the *identical* `cart_pole_controllers.yaml`; only the URDF's `<ros2_control>` hardware (`ign_ros2_control/IgnitionSystem`) and the launch/world files differ. Once LQR is active, the demo applies a one-shot torque disturbance to the pole (via Gazebo's `ApplyLinkWrench`) and LQR drives it back to upright — active disturbance rejection against an independent physics engine.
+
+```bash
+ros2 launch kontrolem_bringup cart_pole_gz.launch.py     # headless (server-only)
+bash kontrolem_bringup/test/e2e_cart_pole_gz.sh          # automated pass/fail
+```
+
+Requires Gazebo Fortress + `ign_ros2_control` installed. One honest caveat vs. the custom sim: Gazebo's timestep/solver aren't exact-tick reproducible, so this e2e asserts tolerance/settle bands (pole kicked but in-basin, then returns to upright), while the deterministic custom-sim e2es remain the tight regression. It is **not** part of `e2e_all.sh` (Gazebo is heavy and a separate dependency).
 
 ## Shared launch body
 
