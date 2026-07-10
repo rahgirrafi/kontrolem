@@ -61,7 +61,22 @@ public:
     if (name == active_name_) return false;
     if (!find(name)) return false;
     pending_ = name;
+    pending_hard_ = false;                   // manual switch: blend (both laws healthy)
     return true;
+  }
+
+  /// Enable AUTOMATIC fail-forward: when the active law reports not-ok for
+  /// `dwell_ticks` consecutive settled ticks, the Supervisor hands off (bumplessly)
+  /// to the NEXT law in the hosted order — the primary, then its fallbacks. The
+  /// dwell debounces a single transient not-ok tick so a momentary blip can't cause
+  /// chatter. There is no automatic switch-BACK (that needs shadow-evaluating a
+  /// dormant law's health and is chatter-prone); recover to the primary with a
+  /// manual request_switch(). Manual switching still works with auto enabled.
+  void set_auto_fallback(bool enabled, int dwell_ticks = 5)
+  {
+    auto_fallback_ = enabled;
+    fail_dwell_ = std::max(1, dwell_ticks);
+    fail_count_ = 0;
   }
 
   /// Per-tick: apply any pending switch (seed incoming + start the blend), run the
@@ -74,7 +89,12 @@ public:
       active_ = find(pending_);
       active_name_ = pending_;
       active_->on_activate(state, problem);  // bumpless seed of the incoming law
-      blend_ = 0;                            // begin the command blend
+      // A manual switch blends (both laws are healthy, so smooth the handoff). An
+      // automatic fail-forward switches HARD: the outgoing law has LOST TRUST, so
+      // blending its (untrustworthy, possibly unbounded) command back in is exactly
+      // wrong — hand fully to the incoming law, which reads the current state.
+      blend_ = pending_hard_ ? blend_ticks_ : 0;
+      if (pending_hard_) outgoing_ = nullptr;
       pending_.clear();
     }
 
@@ -92,6 +112,26 @@ public:
     }
 
     status_ = active_->status();
+
+    // Automatic fail-forward: only evaluated on settled ticks (no blend in
+    // progress, no manual switch already pending). Counts consecutive not-ok ticks
+    // of the active law; on reaching the dwell, queue a switch to the next law in
+    // the hosted order (if any remains — the last fallback has nowhere to go, so
+    // the runtime's safe action takes over instead).
+    if (auto_fallback_ && pending_.empty() && !switching()) {
+      if (!status_.ok) {
+        if (++fail_count_ >= fail_dwell_) {
+          const int idx = active_index();
+          if (idx >= 0 && idx + 1 < static_cast<int>(entries_.size())) {
+            pending_ = entries_[static_cast<std::size_t>(idx + 1)].name;
+            pending_hard_ = true;  // fail-forward: hard handoff, don't blend the failed law
+          }
+          fail_count_ = 0;
+        }
+      } else {
+        fail_count_ = 0;
+      }
+    }
     return out_;
   }
 
@@ -110,16 +150,29 @@ private:
     return nullptr;
   }
 
+  int active_index() const
+  {
+    for (std::size_t i = 0; i < entries_.size(); ++i) {
+      if (entries_[i].name == active_name_) return static_cast<int>(i);
+    }
+    return -1;
+  }
+
   std::vector<Entry> entries_;
   Controller * active_ = nullptr;
   Controller * outgoing_ = nullptr;
   std::string active_name_;
-  std::string pending_;  // requested switch target ("" = none)
+  std::string pending_;       // requested switch target ("" = none)
+  bool pending_hard_ = false;  // pending switch is a hard handoff (auto fail-forward)
 
   int blend_ticks_;
   int blend_;  // ticks into the current blend; >= blend_ticks_ means idle
   Command out_;
   Status status_;
+
+  bool auto_fallback_ = false;
+  int fail_dwell_ = 5;   // consecutive not-ok ticks before an automatic fail-forward
+  int fail_count_ = 0;
 };
 
 }  // namespace kontrolem_control

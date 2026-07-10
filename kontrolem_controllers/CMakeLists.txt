@@ -108,6 +108,14 @@ if(BUILD_TESTING)
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME supervisor COMMAND test_supervisor)
 
+  # Supervisor automatic fail-forward: LQR (modest trust region) -> MPC on a
+  # disturbance that leaves LQR's region, with no manual command.
+  add_executable(test_supervisor_auto test/test_supervisor_auto.cpp)
+  target_link_libraries(test_supervisor_auto kontrolem_controllers)
+  target_compile_definitions(test_supervisor_auto PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME supervisor_auto COMMAND test_supervisor_auto)
+
   add_executable(test_allocation test/test_allocation.cpp)
   target_link_libraries(test_allocation kontrolem_controllers)
   target_compile_definitions(test_allocation PRIVATE

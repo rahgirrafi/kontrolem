@@ -12,6 +12,7 @@
 | `cart_double_pole.launch.py` | cart + double pole | `lqr` | `cart_double_pole_controllers.yaml` | Hard 3-DoF benchmark: one actuator, two passive poles (open-loop very unstable). |
 | `arm2.launch.py` | 2-DoF arm | `qp` | `arm2_controllers.yaml` | Online inverse-dynamics QP regulating a fully-actuated arm with an active torque limit. |
 | `cart_pole_switch.launch.py` | cart-pole | `lqr`+`mpc` | `cart_pole_switch_controllers.yaml` | **Multi-controller Supervisor:** one runtime hosts LQR and MPC; a human switches between them live and bumplessly (see below). |
+| `cart_pole_autofallback.launch.py` | cart-pole (+shove) | `lqr`→`mpc` | `cart_pole_autofallback_controllers.yaml` | **Automatic fail-forward:** a scheduled shove drives LQR out of its trust region; the Supervisor fails over to MPC on its **own** (no human command), which catches the pole (see below). |
 | `quad_stand.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Whole-body QP stands a floating-base quadruped; base + contacts via `<gpio>`. |
 | `quad_push.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Same WBC standing, but the sim delivers a scheduled external base push (~2 s in); the WBC catches it and returns the base to nominal. |
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
@@ -25,7 +26,20 @@ ros2 topic pub -1 /kontrolem_controller/switch_controller std_msgs/msg/String "{
 ros2 topic echo /kontrolem_controller/diagnostics   # the control_law field flips to the new law
 ```
 
-The handoff is **bumpless**: the incoming law is seeded from the current state (`Controller::on_activate`) and the command is blended from the outgoing to the incoming law over `switch_blend_ticks`. Switching is **manual only** for now (a human command); automatic, health-driven switching is a later layer. See [Explanation → Design decisions](../explanation/design-decisions.md) for the spike that established what a safe handoff requires.
+The handoff is **bumpless**: the incoming law is seeded from the current state (`Controller::on_activate`) and the command is blended from the outgoing to the incoming law over `switch_blend_ticks`. See [Explanation → Design decisions](../explanation/design-decisions.md) for the spike that established what a safe handoff requires.
+
+## Automatic fail-forward (health-driven switching)
+
+Setting `auto_fallback: true` lets the Supervisor switch **on its own**, without a human command. It watches the active law's `status().ok`: when the law reports not-ok for `fallback_dwell` consecutive ticks (the dwell debounces a single transient blip), the Supervisor hands off to the **next** law in `control_laws` — the primary, then its fallbacks in order.
+
+The `cart_pole_autofallback` demo shows it end-to-end: LQR balances the pole with a modest trust region (`lqr.q_dev_max`), the sim shoves the pole a few seconds in (see the `disturb_*` params in `cart_pole_disturb.ros2_control.urdf`), that shove drives the state out of LQR's region so LQR reports not-ok, and the Supervisor fails over to MPC, which rides out the disturbance. Watch it happen:
+
+```bash
+ros2 launch kontrolem_bringup cart_pole_autofallback.launch.py
+ros2 topic echo /kontrolem_controller/diagnostics   # control_law flips lqr->mpc with no command sent
+```
+
+Two things differ from a manual switch. First, an auto fail-forward switches **hard** (no command blend): the outgoing law has *lost trust*, so blending its (untrustworthy, possibly unbounded) command back in is exactly wrong — the incoming law takes over fully, reading the current state. Second, there is no automatic switch-*back*: recovering to the primary needs a manual `switch_controller` command (auto switch-back would require shadow-evaluating a dormant law's health and is chatter-prone). Manual switching still works with `auto_fallback` enabled.
 
 ## Shared launch body
 

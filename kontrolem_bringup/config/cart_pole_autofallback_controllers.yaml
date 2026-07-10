@@ -1,0 +1,45 @@
+# controller_manager config for the AUTOMATIC fail-forward demo.
+#
+# One KontrolemController hosts LQR (primary) + MPC (fallback). auto_fallback lets
+# the Supervisor switch on its OWN — no human command: LQR carries a modest trust
+# region (lqr.q_dev_max), and the sim shoves the pole a few seconds in (see the
+# disturb_* params in cart_pole_disturb.ros2_control.urdf). That shove drives the
+# state out of LQR's region -> LQR reports not-ok -> after `fallback_dwell` ticks
+# the Supervisor hands off to MPC (bumplessly), which rides out the disturbance.
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_laws: ["lqr", "mpc"]   # lqr primary, mpc fallback (chain order)
+    auto_fallback: true            # the Supervisor fails over on lost trust
+    fallback_dwell: 1              # fail over on the first not-ok tick (clean, low-noise sim)
+    switch_blend_ticks: 20
+    actuated_joints: ["cart_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+
+    q_ref: [0.0, 0.0]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+    publish_diagnostics: true      # diagnostics.control_law shows the failover live
+
+    # LQR primary with a MODEST validity region so the shove leaves it.
+    lqr.q_diag: [1.0, 10.0, 1.0, 1.0]
+    lqr.r_diag: [0.1]
+    lqr.q_dev_max: 0.15   # tight validated envelope: a gentle shove leaves it
+
+    # MPC fallback (loose torque limit so it can absorb the disturbance).
+    mpc.q_diag: [1.0, 10.0, 1.0, 1.0]
+    mpc.r_diag: [0.1]
+    mpc.horizon: 30
+    mpc.dt_mpc: 0.02
+    mpc.tau_max: 100.0

@@ -107,6 +107,8 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<std::string>("control_law", "lqr");
     auto_declare<std::vector<std::string>>("control_laws", {});  // non-empty -> multi-controller
     auto_declare<int>("switch_blend_ticks", 20);                 // command blend length at a switch
+    auto_declare<bool>("auto_fallback", false);                  // auto fail-forward on lost trust
+    auto_declare<int>("fallback_dwell", 5);                      // not-ok ticks before failover
     auto_declare<std::vector<std::string>>("actuated_joints", {});
     auto_declare<std::string>("robot_description", "");
     auto_declare<std::string>("command_interface", "effort");
@@ -264,6 +266,9 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
         laws_.push_back(std::move(l));
       }
       supervisor_->set_active(laws_param.front());
+      supervisor_->set_auto_fallback(
+        node.get_parameter("auto_fallback").as_bool(),
+        static_cast<int>(node.get_parameter("fallback_dwell").as_int()));
       control_law_ = laws_param.front();
 
       // Manual switch command: publish the target law name to ~/switch_controller.

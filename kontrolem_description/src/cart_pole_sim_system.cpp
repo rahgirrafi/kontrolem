@@ -79,6 +79,16 @@ CallbackReturn CartPoleSimSystem::on_init(const hardware_interface::HardwareInfo
     }
   }
 
+  // Optional scheduled disturbance (all default 0 => disabled).
+  const auto param = [&](const char * key, double def) {
+    const auto it = info_.hardware_parameters.find(key);
+    return it != info_.hardware_parameters.end() ? std::stod(it->second) : def;
+  };
+  disturb_time_ = param("disturb_time", 0.0);
+  disturb_duration_ = param("disturb_duration", 0.0);
+  disturb_tau_ = param("disturb_tau", 0.0);
+  disturb_dof_ = static_cast<int>(param("disturb_dof", 1.0));
+
   RCLCPP_INFO(logger(), "cart-pole sim initialized (%d DoF, ABA integrator)", nv_);
   return CallbackReturn::SUCCESS;
 }
@@ -167,6 +177,13 @@ return_type CartPoleSimSystem::read(const rclcpp::Time &, const rclcpp::Duration
     q_(i) = pos_[static_cast<std::size_t>(i)];
     v_(i) = vel_[static_cast<std::size_t>(i)];
     tau_(i) = eff_cmd_[static_cast<std::size_t>(i)];  // unactuated coords stay 0
+  }
+
+  // Scheduled external disturbance: add a torque to one DoF during its window.
+  elapsed_ += dt;
+  if (disturb_duration_ > 0.0 && disturb_dof_ >= 0 && disturb_dof_ < nv_ &&
+      elapsed_ >= disturb_time_ && elapsed_ < disturb_time_ + disturb_duration_) {
+    tau_(disturb_dof_) += disturb_tau_;
   }
 
   // Forward dynamics of the real robot, then semi-implicit (symplectic) Euler.
