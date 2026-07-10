@@ -80,6 +80,16 @@ public:
   /// is correct for a stateless law (LQR / QP / MPC) that reads the full state
   /// each tick and has nothing to seed.
   virtual void on_activate(const State & /*state*/, const ControlProblem & /*problem*/) {}
+
+  /// Whether compute() has NO persistent internal state — i.e. its output is a
+  /// function of (state, problem) alone, so running it has no side effect that a
+  /// later call depends on. True for a closed-form/feedback law (LQR, QP, MPC:
+  /// the warm-start is an optimization, not semantics); false for a law that
+  /// carries an estimate across ticks (LQG's observer). The Supervisor uses this
+  /// to decide whether it can SHADOW-evaluate a dormant law's health (running its
+  /// compute() only to read status(), discarding the command) — safe only when
+  /// stateless, since shadow-running a stateful law would corrupt its estimate.
+  virtual bool stateless() const { return true; }
 };
 
 /// Wiring-time capability check: the runtime calls this once, before

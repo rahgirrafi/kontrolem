@@ -63,6 +63,10 @@ public:
     seed_from_state(state, problem);
   }
 
+  /// LQG carries an observer estimate (xhat_) across ticks, so it is NOT
+  /// stateless — the Supervisor must not shadow-run it for health evaluation.
+  bool stateless() const override { return false; }
+
   /// Diagnostics/tests: the current observer estimate (deviation coords).
   const Eigen::VectorXd & estimate() const { return xhat_; }
 
