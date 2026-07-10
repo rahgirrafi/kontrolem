@@ -63,6 +63,15 @@ private:
   // Preallocated Eigen scratch so read() does not churn the heap each tick.
   Eigen::VectorXd q_, v_, tau_, a_;
 
+  // Optional scheduled external disturbance: an extra torque added to one DoF for a
+  // window (e.g. shove the pole). Hardware params disturb_* (all 0 => no
+  // disturbance, so existing demos are unchanged). Used by the auto-fallback demo.
+  double disturb_time_{0.0};      ///< start time [s] after the plant is released
+  double disturb_duration_{0.0};  ///< window length [s]; 0 => disabled
+  double disturb_tau_{0.0};       ///< torque added during the window [N·m]
+  int disturb_dof_{1};            ///< generalized-coordinate index to hit (1 = pole)
+  double elapsed_{0.0};           ///< time since the plant was released
+
   // Map a joint name to its model generalized-coordinate index.
   int model_index_of(const std::string & joint_name) const;
 };

@@ -16,7 +16,9 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 |---|---|---|---|
 | `control_law` | string | `lqr` | Paradigm (single-controller mode): `lqr` \| `lqg` \| `mpc` \| `qp` \| `wbc`. Ignored if `control_laws` is set. |
 | `control_laws` | string[] | `[]` | Multi-controller mode: laws the Supervisor hosts (first is initially active). Non-empty enables live switching over `~/switch_controller`. |
-| `switch_blend_ticks` | int | `20` | Command-blend length (ticks) at a switch; larger = gentler handoff. `1` = hard switch. |
+| `switch_blend_ticks` | int | `20` | Command-blend length (ticks) at a **manual** switch; larger = gentler handoff. `1` = hard switch. Auto fail-forward always switches hard (never blends a failed law's command). |
+| `auto_fallback` | bool | `false` | Multi-controller mode: let the Supervisor fail over on its own. When the active law reports `status().ok == false` for `fallback_dwell` consecutive ticks, it hands off (hard) to the next law in `control_laws`. Manual switching still works. |
+| `fallback_dwell` | int | `5` | Consecutive not-ok ticks before an automatic fail-forward (debounces a single transient blip). Only used when `auto_fallback` is true. |
 | `actuated_joints` | string[] | `[]` (required) | Joints the controller commands, in command order. |
 | `robot_description` | string | `""` | URDF XML. Injected by the launch file; do not put in YAML. |
 | `command_interface` | string | `effort` | ros2_control command interface written to the actuated joints. |
