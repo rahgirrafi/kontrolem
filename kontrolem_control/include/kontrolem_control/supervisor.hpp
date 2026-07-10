@@ -79,6 +79,25 @@ public:
     fail_count_ = 0;
   }
 
+  /// Enable AUTOMATIC recovery to the PRIMARY (the first hosted law): while a
+  /// fallback is driving, the Supervisor SHADOW-evaluates the primary's health at
+  /// the current state each tick (runs its compute() only to read status() — safe
+  /// because it is stateless; see Controller::stateless) and, once the primary has
+  /// been trustworthy for `dwell_ticks` CONSECUTIVE ticks, hands back to it
+  /// (bumplessly, WITH a command blend — the incoming primary is healthy). This is
+  /// the switch-BACK half of dwell-time/hysteresis switching (Hespanha–Morse): the
+  /// recovery dwell is deliberately LONG (default 50 ≈ 0.25 s at 200 Hz) so a still-
+  /// settling disturbance can't trigger a premature return, and combined with the
+  /// fail-forward dwell it bounds chatter. Recovery is skipped (the fallback keeps
+  /// driving until a manual switch) when the primary is NOT stateless, since a
+  /// stateful primary can't be shadow-run without corrupting its estimate.
+  void set_auto_recover(bool enabled, int dwell_ticks = 50)
+  {
+    auto_recover_ = enabled;
+    recover_dwell_ = std::max(1, dwell_ticks);
+    recover_count_ = 0;
+  }
+
   /// Per-tick: apply any pending switch (seed incoming + start the blend), run the
   /// active controller (and, during a blend, the outgoing too), and return the
   /// conditioned command. Steady state is a single compute() + a copy.
@@ -132,6 +151,28 @@ public:
         fail_count_ = 0;
       }
     }
+
+    // Automatic recovery to the PRIMARY: only when settled and we're currently on
+    // a fallback (not already the primary). Shadow-evaluate the primary at the
+    // current state — run its compute() purely to read status(), discarding the
+    // command (safe only for a stateless primary). Once the primary has been
+    // trustworthy for recover_dwell_ consecutive ticks (a long hysteresis dwell),
+    // hand back to it with a blend (it is healthy, so a smooth handoff is right).
+    if (auto_recover_ && pending_.empty() && !switching() && !entries_.empty() &&
+        active_index() != 0 && entries_[0].ctrl->stateless())
+    {
+      Controller * primary = entries_[0].ctrl;
+      primary->compute(state, problem, dt);  // shadow: command discarded
+      if (primary->status().ok) {
+        if (++recover_count_ >= recover_dwell_) {
+          pending_ = entries_[0].name;
+          pending_hard_ = false;  // recovery blends: handing to a trusted, healthy law
+          recover_count_ = 0;
+        }
+      } else {
+        recover_count_ = 0;
+      }
+    }
     return out_;
   }
 
@@ -173,6 +214,10 @@ private:
   bool auto_fallback_ = false;
   int fail_dwell_ = 5;   // consecutive not-ok ticks before an automatic fail-forward
   int fail_count_ = 0;
+
+  bool auto_recover_ = false;
+  int recover_dwell_ = 50;   // consecutive healthy-primary ticks before recovering to it
+  int recover_count_ = 0;
 };
 
 }  // namespace kontrolem_control

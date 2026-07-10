@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# End-to-end AUTOMATIC recovery (round-trip) test: launch the cart-pole hosting LQR
+# (primary) + MPC (fallback) with BOTH auto_fallback and auto_recover on. The sim
+# shoves the pole a few seconds in; verify that WITH NO human command the active law
+# goes lqr -> mpc (fail-forward on lost trust) -> lqr (recovery once the primary is
+# trustworthy again), and the pole is caught and settles. Standalone, hard timeout.
+#
+# Usage: e2e_autorecover.sh [launch] [max_pole_rad] [run_s]
+set -o pipefail
+
+LAUNCH="${1:-cart_pole_autorecover.launch.py}"
+MAX_POLE="${2:-0.60}"   # observed swing ~0.24 rad during failover; well under pi/2 (never fell)
+RUN="${3:-40}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-$((RANDOM % 90 + 100))}"
+OUT="$(mktemp)"
+
+cleanup() { pkill -9 -f ros2_control_node 2>/dev/null; pkill -9 -f robot_state_publisher 2>/dev/null; pkill -9 -f spawner 2>/dev/null; rm -f "$OUT"; }
+trap cleanup EXIT
+
+timeout "$RUN" ros2 launch kontrolem_bringup "$LAUNCH" >/dev/null 2>&1 &
+
+timeout "$RUN" python3 - "$MAX_POLE" > "$OUT" 2>/dev/null <<'PY'
+import sys, rclpy
+from rclpy.node import Node
+from kontrolem_msgs.msg import ControllerDiagnostics
+max_pole = float(sys.argv[1])
+rows = []   # (control_law, |pole|)
+class S(Node):
+    def __init__(s):
+        super().__init__('e2erec')
+        s.create_subscription(ControllerDiagnostics, '/kontrolem_controller/diagnostics', s.cb, 10)
+    def cb(s, m):
+        if len(m.q) >= 2:
+            rows.append((m.control_law, abs(m.q[1])))
+rclpy.init(); n = S()
+try: rclpy.spin(n)
+except Exception: pass
+if len(rows) < 500:
+    print("FAIL: no/low diagnostics (%d samples) — launch may not have come up" % len(rows))
+    sys.exit(1)
+laws_early = set(l for l, _ in rows[:250])           # before the shove: LQR only
+final_law = rows[-1][0]
+# Find the fail-forward (first MPC) and the recovery (first LQR AFTER that MPC).
+first_mpc = next((i for i, (l, _) in enumerate(rows) if l == 'mpc'), None)
+back_lqr = None
+if first_mpc is not None:
+    back_lqr = next((i for i in range(first_mpc, len(rows)) if rows[i][0] == 'lqr'), None)
+n_mpc = sum(1 for l, _ in rows if l == 'mpc')
+max_pole_after = max((p for _, p in rows[first_mpc:]), default=9.9) if first_mpc is not None else 9.9
+final_pole = rows[-1][1]
+# Count law changes after the recovery point — must be zero (no chatter).
+chatter = 0
+if back_lqr is not None:
+    prev = 'lqr'
+    for l, _ in rows[back_lqr:]:
+        if l != prev:
+            chatter += 1; prev = l
+failed_forward = (laws_early == {'lqr'}) and (first_mpc is not None) and (n_mpc > 50)
+recovered_back = (back_lqr is not None) and (final_law == 'lqr')
+survived = max_pole_after <= max_pole
+settled = final_pole < 0.05
+no_chatter = (chatter == 0)
+ok = failed_forward and recovered_back and survived and settled and no_chatter
+print("%s: lqr->mpc->%s auto (mpc ticks=%d), max|pole|=%.3f (<=%.2f), final|pole|=%.4f, post-recovery switches=%d" % (
+    'PASS' if ok else 'FAIL', final_law, n_mpc, max_pole_after, max_pole, final_pole, chatter))
+sys.exit(0 if ok else 1)
+PY
+
+cat "$OUT"
+grep -q '^PASS' "$OUT"

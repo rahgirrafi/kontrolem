@@ -116,6 +116,12 @@ if(BUILD_TESTING)
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME supervisor_auto COMMAND test_supervisor_auto)
 
+  add_executable(test_supervisor_recover test/test_supervisor_recover.cpp)
+  target_link_libraries(test_supervisor_recover kontrolem_controllers)
+  target_compile_definitions(test_supervisor_recover PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
+  add_test(NAME supervisor_recover COMMAND test_supervisor_recover)
+
   add_executable(test_allocation test/test_allocation.cpp)
   target_link_libraries(test_allocation kontrolem_controllers)
   target_compile_definitions(test_allocation PRIVATE

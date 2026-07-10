@@ -13,6 +13,7 @@
 | `arm2.launch.py` | 2-DoF arm | `qp` | `arm2_controllers.yaml` | Online inverse-dynamics QP regulating a fully-actuated arm with an active torque limit. |
 | `cart_pole_switch.launch.py` | cart-pole | `lqr`+`mpc` | `cart_pole_switch_controllers.yaml` | **Multi-controller Supervisor:** one runtime hosts LQR and MPC; a human switches between them live and bumplessly (see below). |
 | `cart_pole_autofallback.launch.py` | cart-pole (+shove) | `lqr`→`mpc` | `cart_pole_autofallback_controllers.yaml` | **Automatic fail-forward:** a scheduled shove drives LQR out of its trust region; the Supervisor fails over to MPC on its **own** (no human command), which catches the pole (see below). |
+| `cart_pole_autorecover.launch.py` | cart-pole (+shove) | `lqr`→`mpc`→`lqr` | `cart_pole_autorecover_controllers.yaml` | **Automatic recovery (round trip):** same shove and failover, but the Supervisor also switches **back** to LQR once it's trustworthy again — `lqr`→`mpc`→`lqr` with no human command and no chatter (see below). |
 | `quad_stand.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Whole-body QP stands a floating-base quadruped; base + contacts via `<gpio>`. |
 | `quad_push.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | Same WBC standing, but the sim delivers a scheduled external base push (~2 s in); the WBC catches it and returns the base to nominal. |
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
@@ -39,7 +40,20 @@ ros2 launch kontrolem_bringup cart_pole_autofallback.launch.py
 ros2 topic echo /kontrolem_controller/diagnostics   # control_law flips lqr->mpc with no command sent
 ```
 
-Two things differ from a manual switch. First, an auto fail-forward switches **hard** (no command blend): the outgoing law has *lost trust*, so blending its (untrustworthy, possibly unbounded) command back in is exactly wrong — the incoming law takes over fully, reading the current state. Second, there is no automatic switch-*back*: recovering to the primary needs a manual `switch_controller` command (auto switch-back would require shadow-evaluating a dormant law's health and is chatter-prone). Manual switching still works with `auto_fallback` enabled.
+One thing differs from a manual switch: an auto fail-forward switches **hard** (no command blend). The outgoing law has *lost trust*, so blending its (untrustworthy, possibly unbounded) command back in is exactly wrong — the incoming law takes over fully, reading the current state. Manual switching still works with `auto_fallback` enabled.
+
+### Recovering to the primary on its own (`auto_recover`)
+
+By default a fail-forward is one-way: the fallback keeps driving until a human switches back. Setting `auto_recover: true` closes the loop — the Supervisor returns to the **primary** (first law in `control_laws`) on its own once the primary is trustworthy again. This is the switch-*back* half of dwell-time/hysteresis switching.
+
+The catch is knowing *when* the dormant primary is healthy: a controller only reports `status()` after it runs. So the Supervisor **shadow-evaluates** the primary each tick while the fallback drives — it runs the primary's `compute()` purely to read its `status()`, then discards the command. That is safe only for a **stateless** law (LQR/QP/MPC, whose output is a function of the current state alone); a state-carrying law (LQG's observer) would be corrupted by a throwaway run, so if the primary is stateful, recovery is skipped and a manual switch is needed. Two safeguards prevent flip-flopping: recovery fires only after the primary has been healthy for `recover_dwell` consecutive ticks (a long hysteresis dwell so a still-settling disturbance can't trigger a premature return), and — unlike a fail-forward — the switch-back **blends**, because the incoming primary is trusted.
+
+The `cart_pole_autorecover` demo shows the full round trip: the shove trips LQR → the Supervisor fails over to MPC → MPC settles the pole → LQR becomes trustworthy again → the Supervisor hands back to LQR, all with no human command and no chatter:
+
+```bash
+ros2 launch kontrolem_bringup cart_pole_autorecover.launch.py
+ros2 topic echo /kontrolem_controller/diagnostics   # control_law: lqr -> mpc -> lqr
+```
 
 ## Shared launch body
 

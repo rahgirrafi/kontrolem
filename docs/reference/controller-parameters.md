@@ -19,6 +19,8 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 | `switch_blend_ticks` | int | `20` | Command-blend length (ticks) at a **manual** switch; larger = gentler handoff. `1` = hard switch. Auto fail-forward always switches hard (never blends a failed law's command). |
 | `auto_fallback` | bool | `false` | Multi-controller mode: let the Supervisor fail over on its own. When the active law reports `status().ok == false` for `fallback_dwell` consecutive ticks, it hands off (hard) to the next law in `control_laws`. Manual switching still works. |
 | `fallback_dwell` | int | `5` | Consecutive not-ok ticks before an automatic fail-forward (debounces a single transient blip). Only used when `auto_fallback` is true. |
+| `auto_recover` | bool | `false` | Multi-controller mode: let the Supervisor switch **back to the primary** (first law in `control_laws`) on its own once the primary is trustworthy again. It shadow-evaluates the dormant primary's health each tick — only possible when the primary is a stateless law (LQR/QP/MPC); a state-carrying primary (LQG) is never shadow-run, so recovery is skipped and needs a manual switch. Recovery blends (the incoming primary is healthy). |
+| `recover_dwell` | int | `50` | Consecutive healthy-primary ticks before an automatic switch-back (a long hysteresis dwell so a still-settling disturbance can't trigger a premature return). Only used when `auto_recover` is true. |
 | `actuated_joints` | string[] | `[]` (required) | Joints the controller commands, in command order. |
 | `robot_description` | string | `""` | URDF XML. Injected by the launch file; do not put in YAML. |
 | `command_interface` | string | `effort` | ros2_control command interface written to the actuated joints. |

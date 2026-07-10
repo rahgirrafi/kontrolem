@@ -39,6 +39,12 @@ if bash "$HERE/e2e_switch.sh" | tail -1; then :; else fails=$((fails+1)); fi
 printf '  %-32s %-16s ' "cart_pole_autofallback.launch.py" "auto-fallback"
 if bash "$HERE/e2e_autofallback.sh" | tail -1; then :; else fails=$((fails+1)); fi
 
+# Automatic recovery (round trip): same shove, but the Supervisor also switches BACK
+# to LQR once it's trustworthy again (lqr->mpc->lqr, no human command, no chatter),
+# so it uses e2e_autorecover.sh.
+printf '  %-32s %-16s ' "cart_pole_autorecover.launch.py" "auto-recover"
+if bash "$HERE/e2e_autorecover.sh" | tail -1; then :; else fails=$((fails+1)); fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "E2E SMOKE: ALL PASS"; exit 0
 else echo "E2E SMOKE: $fails FAILED"; exit 1; fi
