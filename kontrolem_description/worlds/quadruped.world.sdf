@@ -1,0 +1,72 @@
+<?xml version="1.0"?>
+<!-- M6.2 world: a ground plane with friction for the WBC standing/push-recovery
+     validation. The quadruped is spawned onto it and must be held up by the WBC
+     against Gazebo's OWN contact + friction solver (the custom sim pins the feet;
+     here they are real unilateral frictional contacts). Physics at 500 Hz matches
+     the WBC's proven dt (0.002). ApplyLinkWrench delivers the base push. -->
+<sdf version="1.8">
+  <world name="quadruped">
+    <physics name="500hz" type="ignored">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <!-- Lets the push test apply a one-shot force to the base (topic
+         /world/quadruped/wrench). -->
+    <plugin filename="ignition-gazebo-apply-link-wrench-system"
+            name="ignition::gazebo::systems::ApplyLinkWrench"/>
+
+    <gravity>0 0 -9.81</gravity>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Static anchor at the base's standing height. The quadruped spawns welded to
+         it (DetachableJoint in the URDF) so it holds the standing posture through the
+         spawn->WBC-activation gap (Gazebo has no "hold until commanded"); the test
+         detaches it once the WBC is live. anchor_link sits where base_link spawns. -->
+    <model name="anchor">
+      <static>true</static>
+      <pose>0 0 0.2753 0 0 0</pose>
+      <link name="anchor_link"/>
+      <!-- Weld the (dynamic) quadruped base_link as the CHILD of this static anchor
+           link, so the base is pinned until the test publishes on the detach topic.
+           The plugin lives on the anchor and polls for floating_quadruped until it
+           spawns, then attaches. -->
+      <plugin filename="ignition-gazebo-detachable-joint-system"
+              name="ignition::gazebo::systems::DetachableJoint">
+        <parent_link>anchor_link</parent_link>
+        <child_model>floating_quadruped</child_model>
+        <child_link>base_link</child_link>
+        <detach_topic>/quadruped/detach</detach_topic>
+      </plugin>
+    </model>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <surface>
+            <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

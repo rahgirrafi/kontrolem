@@ -1,0 +1,13 @@
+<library path="kontrolem_gz">
+  <class name="kontrolem_gz/GzBaseStateSystem"
+         type="kontrolem_gz::GzBaseStateSystem"
+         base_class_type="gz_ros2_control::GazeboSimSystemInterface">
+    <description>
+      gz_ros2_control hardware component that exports a floating base's ground-truth
+      world pose + body-frame twist (read directly from Gazebo's ECM) as the 13
+      floating_base scalar state interfaces, plus constant all-stance per-foot contact
+      scalars — so the in-gz controller_manager can feed non-joint base/contact state
+      to a whole-body controller alongside IgnitionSystem's joints.
+    </description>
+  </class>
+</library>
