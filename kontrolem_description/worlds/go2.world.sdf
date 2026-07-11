@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!-- M7 world: a friction ground plane for the Unitree Go2 WBC standing/push-recovery
+     validation. The Go2 is spawned onto it and held up by the SAME whole-body QP
+     controller that stands the toy quadruped, now against Gazebo's OWN contact +
+     friction solver (real unilateral frictional feet). Physics at 500 Hz matches the
+     WBC's proven dt (0.002). ApplyLinkWrench delivers the base push
+     (/world/go2/wrench). Mirrors quadruped.world.sdf; only the anchor height, model
+     name, base link, and detach topic differ (Go2 base_height 0.2868, offline-proven). -->
+<sdf version="1.8">
+  <world name="go2">
+    <physics name="500hz" type="ignored">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <!-- Lets the push test apply a one-shot force to the base (topic
+         /world/go2/wrench). -->
+    <plugin filename="ignition-gazebo-apply-link-wrench-system"
+            name="ignition::gazebo::systems::ApplyLinkWrench"/>
+
+    <gravity>0 0 -9.81</gravity>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Static anchor at the Go2's standing height. The Go2 spawns welded to it
+         (DetachableJoint) so it holds the standing posture through the
+         spawn->WBC-activation gap (Gazebo has no "hold until commanded"); the test
+         detaches it once the WBC is live. anchor_link sits where base spawns. -->
+    <model name="anchor">
+      <static>true</static>
+      <pose>0 0 0.2868 0 0 0</pose>
+      <link name="anchor_link"/>
+      <!-- Weld the (dynamic) Go2 base as the CHILD of this static anchor link, so
+           the base is pinned until the test publishes on /go2/detach. The plugin
+           lives on the anchor and polls for the go2 model until it spawns. -->
+      <plugin filename="ignition-gazebo-detachable-joint-system"
+              name="ignition::gazebo::systems::DetachableJoint">
+        <parent_link>anchor_link</parent_link>
+        <child_model>go2</child_model>
+        <child_link>base</child_link>
+        <detach_topic>/go2/detach</detach_topic>
+      </plugin>
+    </model>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <surface>
+            <friction><ode><mu>1.0</mu><mu2>1.0</mu2></ode></friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

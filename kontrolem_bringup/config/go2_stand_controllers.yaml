@@ -1,0 +1,66 @@
+# M7 — controller_manager config for the Unitree Go2 standing-WBC demo. The SAME
+# KontrolemController runtime + control_law: wbc that stand the toy quadruped, now
+# retargeted to the real Go2 model — only the robot-specific config differs (joint
+# names, foot frames, nominal posture, base height, torque limit). No code change.
+#
+# nominal_posture + base_height are offline-proven (scratchpad go2_offline.py /
+# go2_static.py): thigh 0.9, calf -1.8 grounds all four feet at base z = 0.2868, and
+# static equilibrium is feasible with peak |tau| ~6 N.m (<< 23.7) and large friction
+# margin. The robot_description (clean Go2 URDF) is injected at launch.
+controller_manager:
+  ros__parameters:
+    update_rate: 500  # Hz — matches the world dt (0.002) and the offline WBC proof
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: wbc
+    base_type: floating          # SE(3) base + contacts via <gpio> semantic components
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+    publish_diagnostics: true
+
+    # Go2's 12 actuated joints; order fixes the actuation selection Sᵀ and aligns
+    # nominal_posture. Mapping to Pinocchio is by name, so any order is valid.
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    base_gpio: floating_base
+    contact_gpio: contact
+
+    # Standing posture (offline-proven; matches the sim's initial joint state +
+    # base_height, feet grounded).
+    wbc.base_height: 0.2868
+    wbc.nominal_posture: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
+
+    # QP task gains / weights (kp/kd/weights are acceleration-space & relative, hence
+    # mass-independent — the toy's proven set transfers; retune in-sim only if needed).
+    # Friction mu <= ground (0.6); tau_max = Go2's real hip/thigh limit (23.7 N.m).
+    wbc.kp_base: 100.0
+    wbc.kd_base: 20.0
+    wbc.kp_post: 25.0
+    wbc.kd_post: 5.0
+    wbc.w_base: 100.0
+    wbc.w_post: 1.0
+    wbc.w_force: 0.0001
+    wbc.w_tau: 0.0001
+    wbc.mu: 0.5
+    wbc.tau_max: 23.7

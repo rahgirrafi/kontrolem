@@ -40,6 +40,9 @@ Leave it running. In the launch log you should see the base-state hardware bind 
 
 If you don't see those three lines, do **not** proceed — see [Troubleshooting](#troubleshooting-nothing-happens) below.
 
+!!! tip "Same recipe for the real Unitree Go2 (`go2_gz`)"
+    Everything on this page applies unchanged to the real Go2 demo — only the names differ. Launch `go2_gz.launch.py` instead, and substitute throughout: model `floating_quadruped` → **`go2`**, base link `base_link` → **`base`**, detach topic `/quadruped/detach` → **`/go2/detach`**, wrench topic `/world/quadruped/wrench` → **`/world/go2/wrench`**, and the push entity `floating_quadruped::base_link` → **`go2::base`**. Go2 is ~1.6× heavier, so use a firmer push (~**5000 N** for a ~6 cm shove vs the toy's 3000 N). See [Reference → Demos](../reference/demos.md#wbc-on-the-real-unitree-go2-go2_gz).
+
 ## Step 2 — Verify the WBC is actually active
 
 In a **second sourced terminal**, confirm the controller is live and its floating-base interfaces exist:

@@ -33,6 +33,10 @@ pluginlib_export_plugin_description_file(hardware_interface kontrolem_descriptio
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY worlds DESTINATION share/${PROJECT_NAME})
+# Vendored Go2 visual meshes (GUI only; headless uses primitive collisions). The
+# go2_description/dae/ subtree lets ign resolve model://go2_description/dae/*.dae when
+# this dir is on IGN_GAZEBO_RESOURCE_PATH (set by go2_gz.launch.py).
+install(DIRECTORY meshes DESTINATION share/${PROJECT_NAME})
 install(TARGETS kontrolem_description
   EXPORT export_kontrolem_description
   LIBRARY DESTINATION lib
