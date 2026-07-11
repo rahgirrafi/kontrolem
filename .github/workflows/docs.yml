@@ -33,12 +33,12 @@ jobs:
       - name: Install docs toolchain
         run: pip install -r docs/requirements.txt
 
-      - name: Build Sphinx HTML
-        run: sphinx-build -b html docs docs/_build/html
+      - name: Build MkDocs site
+        run: mkdocs build --strict          # writes to ./site; --strict fails on broken links
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_build/html
+          path: site
 
   deploy:
     needs: build
