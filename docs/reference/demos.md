@@ -20,6 +20,7 @@
 | `cart_pole_gz.launch.py` | cart-pole | `lqr` | `cart_pole_controllers.yaml` | **Independent-physics validation:** the SAME LQR + config, but the plant is **Gazebo Fortress** (`ign_ros2_control`) instead of the custom sim — proof the substrate is swappable with zero controller change (see below). Needs Gazebo installed. |
 | `floating_box_gz.launch.py` | floating body | *(probe, not a law)* | `floating_box_gz_controllers.yaml` | **Base-state from Gazebo:** a free body's ground-truth odometry is bridged into the 13 `floating_base` state interfaces (via `kontrolem_state_bridge`) and the probe reassembles a manifold State — non-joint base state from a non-custom producer, zero controller change (see below). Needs Gazebo installed. |
 | `quad_gz.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | **WBC vs real contact:** the SAME WBC + SAME config as `quad_stand`, but the plant is Gazebo's own contact/friction solver (not pinned feet) — stands and rejects a real base shove (see below). Needs Gazebo installed. |
+| `go2_gz.launch.py` | **real Unitree Go2** | `wbc` | `go2_stand_controllers.yaml` | **WBC on a real robot model:** the SAME WBC, now retargeted to the actual Go2 (15 kg, real inertials) against Gazebo's contact solver — stands and rejects a 5000 N shove. Config + URDF only, zero controller-code change (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -99,6 +100,20 @@ bash kontrolem_bringup/test/e2e_quad_gz.sh             # automated stance + push
 For the full follow-along — launch, verify the WBC is active, detach, push, choose the force, and troubleshoot "nothing happens" — see [How-to → Push the Gazebo quadruped](../how-to/push-the-gazebo-quadruped.md). The command order is strict: **launch → verify active → detach → push** (a push before detach hits a welded, frozen robot and does nothing).
 
 Two hard-won integration notes, documented in DEVELOPMENT.md M6.2: while welded, **no joint of the model responds to applied torque** (don't diagnose the controller against a welded robot), and **high SDF joint damping makes DART swallow commanded joint forces entirely** (keep `<dynamics damping>` near zero and let the controller do the damping).
+
+## WBC on the real Unitree Go2 (`go2_gz`)
+
+`go2_gz` closes the loop from toy to real robot: it runs the **same** WBC as `quad_gz` on the **actual Unitree Go2** — the real 12-DoF quadruped with Unitree's own mass, inertia, and geometry (trunk 6.9 kg, ~15 kg total), vendored from the Go2 description. This is the payoff of the config-driven design: retargeting from the toy took **no controller-code change** — only a new robot URDF, a `go2_stand_controllers.yaml` (Go2's joint names, foot frames, nominal posture, base height, τ_max), a Go2 world, and a launch. The WBC's `RobotModel` binds joints and feet **by name** and sizes the QP from the model, so the same binary that stands the toy stands the Go2.
+
+The standing posture is **offline-proven before any simulation**: an offline Pinocchio script derives `base_height` = 0.2868 m and `nominal_posture` (thigh 0.9, calf −1.8) so all four feet touch the ground, and confirms static equilibrium is feasible with peak joint torque ~6 N·m (well under Go2's 23.7 N·m limit) and large friction-cone margin. In Gazebo, after the same DetachableJoint weld/detach startup, the WBC holds the stance (base z 0.288, `ok` 1.0) and a one-shot **5000 N** lateral shove displaces the base ~6 cm before it recovers to sub-millimetre (Go2 is ~1.6× the toy's mass, so it needs more force than the toy's 3000 N for the same excursion).
+
+```bash
+ros2 launch kontrolem_bringup go2_gz.launch.py         # headless; add gui:=true to watch
+ign topic -t /go2/detach -m ignition.msgs.Empty -p ""  # release the startup weld
+bash kontrolem_bringup/test/e2e_go2_gz.sh              # automated stance + push pass/fail
+```
+
+The operational recipe is identical to the toy's (see [How-to → Push the Gazebo quadruped](../how-to/push-the-gazebo-quadruped.md)) — only the model name (`go2`), detach topic (`/go2/detach`), wrench topic (`/world/go2/wrench`), base link (`base`), and push magnitude differ. The Go2 description is vendored under a BSD license (Unitree geometry; CHAMP configs by Anuj Jain) — see the `kontrolem_description` README.
 
 ## Shared launch body
 
