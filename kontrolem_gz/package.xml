@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_gz</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 Gazebo-native hardware: GzBaseStateSystem, a gz_ros2_control
+    hardware component that reads a floating base's ground-truth pose/twist directly
+    from Gazebo's entity-component manager and exports it (plus constant all-stance
+    contact) as the floating_base/contact scalar state interfaces, so the in-gz
+    controller_manager can feed non-joint base state to a whole-body controller
+    alongside IgnitionSystem's joints. Isolates the heavy Gazebo build deps here.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>gz_ros2_control</depend>
+  <depend>hardware_interface</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>ignition-gazebo6</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

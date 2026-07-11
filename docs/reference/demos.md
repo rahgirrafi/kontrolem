@@ -19,6 +19,7 @@
 | `floating_spike.launch.py` | floating biped | *(probe, not a law)* | `floating_spike_controllers.yaml` | Development spike: a read-only controller reassembles SE(3) base state from scalar interfaces as the base free-falls. |
 | `cart_pole_gz.launch.py` | cart-pole | `lqr` | `cart_pole_controllers.yaml` | **Independent-physics validation:** the SAME LQR + config, but the plant is **Gazebo Fortress** (`ign_ros2_control`) instead of the custom sim — proof the substrate is swappable with zero controller change (see below). Needs Gazebo installed. |
 | `floating_box_gz.launch.py` | floating body | *(probe, not a law)* | `floating_box_gz_controllers.yaml` | **Base-state from Gazebo:** a free body's ground-truth odometry is bridged into the 13 `floating_base` state interfaces (via `kontrolem_state_bridge`) and the probe reassembles a manifold State — non-joint base state from a non-custom producer, zero controller change (see below). Needs Gazebo installed. |
+| `quad_gz.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | **WBC vs real contact:** the SAME WBC + SAME config as `quad_stand`, but the plant is Gazebo's own contact/friction solver (not pinned feet) — stands and rejects a real base shove (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -82,6 +83,22 @@ bash kontrolem_bringup/test/e2e_floating_box_gz.sh        # automated pass/fail
 ```
 
 Requires Gazebo Fortress + `ros_gz_bridge` installed. Like `cart_pole_gz`, it is **not** part of `e2e_all.sh` (heavy + separate dependency). This is the stepping-stone toward the real-Go2 path, where the same bridge consumes an external estimator (InEKF) instead of Gazebo ground truth.
+
+## WBC vs. real contact (`quad_gz`)
+
+The M6 endgame: `quad_stand`/`quad_push` prove the whole-body QP against a custom sim whose feet are *pinned* (bilateral, never-slipping contact). `quad_gz` runs the **same** WBC and the **same** `quad_stand_controllers.yaml` against **Gazebo's own contact and friction solver** — real unilateral feet that can slip, on a ground plane with finite friction. The joints come from `ign_ros2_control/IgnitionSystem`; the base pose/twist + contact flags come from **`kontrolem_gz/GzBaseStateSystem`**, a gz-native hardware component that reads ground truth straight from Gazebo's ECM (the in-gz controller_manager can only load `GazeboSimSystemInterface` hardware, so the topic bridge of `floating_box_gz` can't be used there).
+
+Startup uses a **DetachableJoint weld**: Gazebo has no "hold until commanded", so the base spawns welded to a static anchor — which (a DART quirk turned feature) freezes the *entire* model rigid at the nominal posture — and the demo detaches it once the WBC is active, handing the controller a clean at-rest state. After the release the WBC holds the stance indefinitely; a one-shot 3000 N lateral shove (≈0.2 m/s of base momentum via `ApplyLinkWrench`) displaces the base ~6 cm and the WBC pulls it back to millimetres, cone margin healthy throughout. A 6000 N shove correctly overwhelms it — the friction cone saturates and `status()` reports it — so the success is bounded, not staged.
+
+```bash
+ros2 launch kontrolem_bringup quad_gz.launch.py        # headless; add gui:=true to watch
+ign topic -t /quadruped/detach -m ignition.msgs.Empty -p ""   # release the startup weld
+bash kontrolem_bringup/test/e2e_quad_gz.sh             # automated stance + push pass/fail
+```
+
+For the full follow-along — launch, verify the WBC is active, detach, push, choose the force, and troubleshoot "nothing happens" — see [How-to → Push the Gazebo quadruped](../how-to/push-the-gazebo-quadruped.md). The command order is strict: **launch → verify active → detach → push** (a push before detach hits a welded, frozen robot and does nothing).
+
+Two hard-won integration notes, documented in DEVELOPMENT.md M6.2: while welded, **no joint of the model responds to applied torque** (don't diagnose the controller against a welded robot), and **high SDF joint damping makes DART swallow commanded joint forces entirely** (keep `<dynamics damping>` near zero and let the controller do the damping).
 
 ## Shared launch body
 
