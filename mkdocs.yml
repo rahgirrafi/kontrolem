@@ -2,7 +2,9 @@ site_name: Kontrol'Em v2
 site_description: A robot-agnostic, plugin-based control framework for ROS 2 — "MoveIt for control."
 docs_dir: docs
 site_dir: site
-use_directory_urls: true
+# false → emit page.html (not page/index.html) so links are real .html files that
+# work both on GitHub Pages and when browsing the built site/ locally over file://.
+use_directory_urls: false
 
 theme:
   name: material
