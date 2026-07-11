@@ -1,0 +1,3 @@
+# Docs toolchain for the MkDocs site (CI: .github/workflows/docs.yml).
+# mkdocs-material pulls in mkdocs + pymdown-extensions (used in mkdocs.yml).
+mkdocs-material
