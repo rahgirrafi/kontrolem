@@ -11,6 +11,8 @@ find_package(gz_ros2_control REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(realtime_tools REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(ignition-gazebo6 REQUIRED)
 
 add_library(kontrolem_gz SHARED
@@ -19,7 +21,7 @@ target_include_directories(kontrolem_gz PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
 ament_target_dependencies(kontrolem_gz PUBLIC
-  gz_ros2_control hardware_interface pluginlib rclcpp)
+  gz_ros2_control hardware_interface pluginlib rclcpp realtime_tools nav_msgs)
 # Gazebo ECM (Link/Model/EntityComponentManager) — read base_link ground truth.
 target_link_libraries(kontrolem_gz PUBLIC ignition-gazebo6::core)
 
@@ -34,6 +36,7 @@ install(TARGETS kontrolem_gz
   RUNTIME DESTINATION bin)
 
 ament_export_targets(export_kontrolem_gz HAS_LIBRARY_TARGET)
-ament_export_dependencies(gz_ros2_control hardware_interface pluginlib rclcpp)
+ament_export_dependencies(
+  gz_ros2_control hardware_interface pluginlib rclcpp realtime_tools nav_msgs)
 
 ament_package()

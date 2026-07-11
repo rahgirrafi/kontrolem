@@ -17,6 +17,13 @@ controller_manager:
     kontrolem_controller:
       type: kontrolem_ros2_control/KontrolemController
 
+    # M8: floating-base state estimator. Runs alongside the WBC; publishes the
+    # estimated base pose/twist on /base_odom (world pose, body twist). In open-loop
+    # validation the WBC still reads ground truth (GzBaseStateSystem); when the loop
+    # is closed the estimate becomes the WBC's base source instead.
+    base_estimator:
+      type: kontrolem_ros2_control/BaseEstimatorController
+
 kontrolem_controller:
   ros__parameters:
     control_law: wbc
@@ -64,3 +71,37 @@ kontrolem_controller:
     wbc.w_tau: 0.0001
     wbc.mu: 0.5
     wbc.tau_max: 23.7
+
+# M8 estimator — same joints/feet as the WBC (it reads the same encoders + real
+# contact), IMU on /imu/data, seeds at the offline-proven standing height. Gains are
+# the BaseEstimatorConfig defaults (sized for standing). robot_description (the clean
+# floating Go2 URDF) is injected at launch, exactly as for kontrolem_controller.
+base_estimator:
+  ros__parameters:
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_gpio: contact
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    imu_topic: /imu/data
+    odom_topic: /base_odom
+    odom_frame: world
+    base_frame: base
+    base_height: 0.2868
+    gravity: 9.81
+    k_grav: 0.0     # gravity aid OFF in-loop (WBC holds level; avoids accel-fooled limit cycle)
+    k_vel: 1.0
+    k_pos: 0.3       # moderate absolute anchor pinning
+    accel_gate: 0.5
+    gyro_gate: 0.5   # suppress the gravity aid while rotating fast (keeps push transient tight)
+    innov_max: 0.15

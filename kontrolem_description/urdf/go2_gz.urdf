@@ -1141,6 +1141,73 @@
     <axis
       xyz="0 0 0" />
   </joint>
+  <gazebo reference="FL_foot_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+    <disableFixedJointLumping>true</disableFixedJointLumping>
+  </gazebo>
+  <gazebo reference="FR_foot_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+    <disableFixedJointLumping>true</disableFixedJointLumping>
+  </gazebo>
+  <gazebo reference="RL_foot_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+    <disableFixedJointLumping>true</disableFixedJointLumping>
+  </gazebo>
+  <gazebo reference="RR_foot_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+    <disableFixedJointLumping>true</disableFixedJointLumping>
+  </gazebo>
+  <gazebo reference="imu">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <topic>imu/data</topic>
+      <imu>
+        <angular_velocity>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>0.0003</stddev></noise></x><y><noise type="gaussian"><mean>0.0</mean><stddev>0.0003</stddev></noise></y><z><noise type="gaussian"><mean>0.0</mean><stddev>0.0003</stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0.0</mean><stddev>0.017</stddev></noise></x><y><noise type="gaussian"><mean>0.0</mean><stddev>0.017</stddev></noise></y><z><noise type="gaussian"><mean>0.0</mean><stddev>0.017</stddev></noise></z>
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>
+  <gazebo reference="FL_foot">
+    <sensor name="FL_foot_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <contact>
+        <collision>FL_foot_collision</collision>
+      </contact>
+    </sensor>
+  </gazebo>
+  <gazebo reference="FR_foot">
+    <sensor name="FR_foot_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <contact>
+        <collision>FR_foot_collision</collision>
+      </contact>
+    </sensor>
+  </gazebo>
+  <gazebo reference="RL_foot">
+    <sensor name="RL_foot_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <contact>
+        <collision>RL_foot_collision</collision>
+      </contact>
+    </sensor>
+  </gazebo>
+  <gazebo reference="RR_foot">
+    <sensor name="RR_foot_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <contact>
+        <collision>RR_foot_collision</collision>
+      </contact>
+    </sensor>
+  </gazebo>
   <gazebo reference="FL_foot">
     <mu1>0.6</mu1><mu2>0.6</mu2>
     <kp>1e4</kp><kd>1.0</kd>
@@ -1229,6 +1296,11 @@
       <plugin>kontrolem_gz/GzBaseStateSystem</plugin>
       <param name="model_name">go2</param>
       <param name="base_link">base</param>
+      <!-- base_source ecm|estimate (M8): ecm = sim ground truth; estimate subscribes to
+           the BaseEstimatorController's /base_odom (closed-loop sim-to-real). The launch
+           substitutes __BASE_SOURCE__ from the base_source arg. Contact stays real. -->
+      <param name="base_source">__BASE_SOURCE__</param>
+      <param name="odom_topic">/base_odom</param>
     </hardware>
     <gpio name="floating_base">
       <state_interface name="pose.position.x"/>
@@ -1258,6 +1330,16 @@
       <parameters>__CTRL_YAML__</parameters>
       <parameters>__DESC_YAML__</parameters>
       <controller_manager_name>controller_manager</controller_manager_name>
+    </plugin>
+  </gazebo>
+  <gazebo>
+    <plugin filename="ignition-gazebo-odometry-publisher-system"
+            name="ignition::gazebo::systems::OdometryPublisher">
+      <dimensions>3</dimensions>
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base</robot_base_frame>
+      <odom_topic>/base_truth_odom</odom_topic>
+      <odom_publish_frequency>200</odom_publish_frequency>
     </plugin>
   </gazebo>
 </robot>

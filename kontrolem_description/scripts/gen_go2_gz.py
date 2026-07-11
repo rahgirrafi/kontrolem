@@ -38,8 +38,73 @@ def ign_joint(name):
     </joint>'''
 
 
+def imu_sensor():
+    # M8: a real IMU on the Go2's imu link (base-fixed). Feeds /imu/data ->
+    # BaseEstimatorController. Small Gaussian noise (CHAMP-style) so the estimator is
+    # exercised against realistic measurements, not a perfect oracle. 500 Hz = a fresh
+    # sample every control tick (a real Go2 IMU runs several hundred Hz to 1 kHz), which
+    # keeps the gyro-only attitude tight through a fast push transient.
+    def axis(stddev):
+        return (f'<noise type="gaussian"><mean>0.0</mean>'
+                f'<stddev>{stddev}</stddev></noise>')
+    return f'''  <gazebo reference="imu">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <topic>imu/data</topic>
+      <imu>
+        <angular_velocity>
+          <x>{axis(0.0003)}</x><y>{axis(0.0003)}</y><z>{axis(0.0003)}</z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x>{axis(0.017)}</x><y>{axis(0.017)}</y><z>{axis(0.017)}</z>
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>'''
+
+
+def preserve_foot_joint(foot):
+    # Keep each foot as its OWN link in the SDF. By default sdformat's URDF->SDF lumps a
+    # fixed-joint child into its parent (foot -> calf), renaming the foot collision to
+    # "<calf>_fixed_joint_lump__<foot>_collision_N" and parenting the contact sensor to
+    # the calf — fragile to reference. disableFixedJointLumping keeps FL_foot a real
+    # link (collision "FL_foot_collision", sensor parented to FL_foot) so it matches
+    # Pinocchio's foot frame. (The URDF's dont_collapse attribute alone is ignored by
+    # this sdformat; the <gazebo> joint extension is the reliable control.)
+    joint = f"{foot}_joint"
+    return f'''  <gazebo reference="{joint}">
+    <preserveFixedJoint>true</preserveFixedJoint>
+    <disableFixedJointLumping>true</disableFixedJointLumping>
+  </gazebo>'''
+
+
+def contact_sensor(foot):
+    # M8: a real per-foot contact sensor. With the foot preserved as its own link
+    # (preserve_foot_joint), its single collision is named "<foot>_collision". The
+    # ignition-gazebo-contact-system populates a ContactSensorData component on the
+    # sensor entity; GzBaseStateSystem reads it from the ECM (real stance, replacing
+    # M7's constant all-stance) and exports the same contact.<foot> gpio.
+    return f'''  <gazebo reference="{foot}">
+    <sensor name="{foot}_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>500</update_rate>
+      <contact>
+        <collision>{foot}_collision</collision>
+      </contact>
+    </sensor>
+  </gazebo>'''
+
+
 def build_injection():
     parts = []
+    # 0. Sensors (walking-ready: real IMU + real per-foot contact — the sensors a
+    #    physical Go2 actually has, reused by every future estimator/gait). Feet are
+    #    kept as their own links first, so the contact sensors/collisions name cleanly.
+    parts.extend(preserve_foot_joint(f) for f in FEET)
+    parts.append(imu_sensor())
+    parts.extend(contact_sensor(f) for f in FEET)
+
     # 1. Foot friction (Go2/CHAMP-proven soft contact in Fortress).
     for foot in FEET:
         parts.append(f'''  <gazebo reference="{foot}">
@@ -62,6 +127,11 @@ def build_injection():
       <plugin>kontrolem_gz/GzBaseStateSystem</plugin>
       <param name="model_name">go2</param>
       <param name="base_link">base</param>
+      <!-- base_source ecm|estimate (M8): ecm = sim ground truth; estimate subscribes to
+           the BaseEstimatorController's /base_odom (closed-loop sim-to-real). The launch
+           substitutes __BASE_SOURCE__ from the base_source arg. Contact stays real. -->
+      <param name="base_source">__BASE_SOURCE__</param>
+      <param name="odom_topic">/base_odom</param>
     </hardware>
     <gpio name="floating_base">
       <state_interface name="pose.position.x"/>
@@ -91,6 +161,21 @@ def build_injection():
       <parameters>__CTRL_YAML__</parameters>
       <parameters>__DESC_YAML__</parameters>
       <controller_manager_name>controller_manager</controller_manager_name>
+    </plugin>
+  </gazebo>''')
+
+    # 5. Ground-truth base odometry (M8 VALIDATION ONLY — not in the control loop).
+    #    Full 3D world pose + body-frame twist on /base_truth_odom (same convention
+    #    OdometryBaseBridge expects, proven in M6.3). The e2e compares the estimator's
+    #    /base_odom against this to gate open-loop accuracy and log estimate-vs-truth.
+    parts.append('''  <gazebo>
+    <plugin filename="ignition-gazebo-odometry-publisher-system"
+            name="ignition::gazebo::systems::OdometryPublisher">
+      <dimensions>3</dimensions>
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base</robot_base_frame>
+      <odom_topic>/base_truth_odom</odom_topic>
+      <odom_publish_frequency>200</odom_publish_frequency>
     </plugin>
   </gazebo>''')
     return "\n".join(parts)

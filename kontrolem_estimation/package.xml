@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_estimation</name>
+  <version>0.1.0</version>
+  <description>
+    ROS-free floating-base state estimator (contact-aided, InEKF-ready). A
+    BaseEstimator fuses an IMU with leg odometry (stance-foot kinematics) to
+    estimate the SE_2(3) base state (R, v, p) — the base pose/twist a real robot
+    has no ground-truth oracle for. Eigen + kontrolem_model only; no ROS.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">rahgirrafi</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>eigen3_cmake_module</depend>
+  <depend>eigen</depend>
+  <depend>kontrolem_model</depend>
+  <depend>kontrolem_control</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

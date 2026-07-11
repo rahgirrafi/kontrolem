@@ -21,6 +21,7 @@
 | `floating_box_gz.launch.py` | floating body | *(probe, not a law)* | `floating_box_gz_controllers.yaml` | **Base-state from Gazebo:** a free body's ground-truth odometry is bridged into the 13 `floating_base` state interfaces (via `kontrolem_state_bridge`) and the probe reassembles a manifold State — non-joint base state from a non-custom producer, zero controller change (see below). Needs Gazebo installed. |
 | `quad_gz.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | **WBC vs real contact:** the SAME WBC + SAME config as `quad_stand`, but the plant is Gazebo's own contact/friction solver (not pinned feet) — stands and rejects a real base shove (see below). Needs Gazebo installed. |
 | `go2_gz.launch.py` | **real Unitree Go2** | `wbc` | `go2_stand_controllers.yaml` | **WBC on a real robot model:** the SAME WBC, now retargeted to the actual Go2 (15 kg, real inertials) against Gazebo's contact solver — stands and rejects a 5000 N shove. Config + URDF only, zero controller-code change (see below). Needs Gazebo installed. |
+| `go2_gz.launch.py base_source:=estimate` | **real Unitree Go2** | `wbc` + `base_estimator` | `go2_stand_controllers.yaml` | **WBC on its OWN state estimate (sim-to-real):** the same Go2 stands and rejects a 5000 N shove using a **floating-base state estimator** (IMU + leg odometry + contact) instead of Gazebo ground truth — no oracle in the control loop (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -114,6 +115,27 @@ bash kontrolem_bringup/test/e2e_go2_gz.sh              # automated stance + push
 ```
 
 The operational recipe is identical to the toy's (see [How-to → Push the Gazebo quadruped](../how-to/push-the-gazebo-quadruped.md)) — only the model name (`go2`), detach topic (`/go2/detach`), wrench topic (`/world/go2/wrench`), base link (`base`), and push magnitude differ. The Go2 description is vendored under a BSD license (Unitree geometry; CHAMP configs by Anuj Jain) — see the `kontrolem_description` README.
+
+## Standing on an ESTIMATE — the sim-to-real path (`base_source:=estimate`)
+
+Everything above stands the Go2 on **ground-truth** base state, read straight from Gazebo's ECM (`GzBaseStateSystem`). A real Go2 has no such oracle: the floating-base pose/twist must be **estimated** from the sensors a physical robot actually has — an IMU, joint encoders, and foot-contact detection. `base_source:=estimate` closes that gap: a `base_estimator` controller runs the contact-aided [state estimator](../explanation/state-and-non-joint-data.md#estimating-the-base-on-a-real-robot) and publishes the estimate on `/base_odom`, and `GzBaseStateSystem` feeds **that** to the WBC instead of the ECM (contact stays real from the ECM). The control loop never sees ground truth.
+
+```bash
+# WBC stands on its own estimate; the estimator runs automatically.
+ros2 launch kontrolem_bringup go2_gz.launch.py base_source:=estimate
+ign topic -t /go2/detach -m ignition.msgs.Empty -p ""      # release the startup weld
+bash kontrolem_bringup/test/e2e_go2_estimator_closed.sh    # closed-loop stand + push
+# The estimator also runs in the default (ecm) mode, publishing /base_odom for validation:
+bash kontrolem_bringup/test/e2e_go2_estimator.sh           # open-loop estimate vs ground truth
+```
+
+The estimator is a **contact-aided complementary / leg-odometry filter** behind an
+**InEKF-ready** interface (state `(R, v, p)`, `predict()`/`correct()`), so a full invariant
+EKF can drop in later. Validated two ways: **open-loop**, the estimate tracks the (bridged)
+ground truth to **1.6 mm / 0.03°** in stance; **closed-loop**, the Go2 stands (true height
+0.289 m) and rejects a **5000 N** shove — recovering just as it does on ground truth — with
+the estimate tracking the true base to **< 7 mm / 0.01°** throughout, all with only the
+estimate in the loop. See [How-to → Estimate the floating-base state](../how-to/estimate-the-base-state.md).
 
 ## Shared launch body
 

@@ -23,6 +23,15 @@
          /world/go2/wrench). -->
     <plugin filename="ignition-gazebo-apply-link-wrench-system"
             name="ignition::gazebo::systems::ApplyLinkWrench"/>
+    <!-- M8 sensor systems (walking-ready). The IMU system integrates the base's
+         motion into an /imu/data stream; the Contact system evaluates the per-foot
+         <sensor type="contact"> and populates a ContactSensorData component on each
+         foot's sensor entity (read by GzBaseStateSystem for real stance). Both are
+         non-rendering, so they run headless (-s) — no ogre/sensors-system needed. -->
+    <plugin filename="ignition-gazebo-imu-system"
+            name="ignition::gazebo::systems::Imu"/>
+    <plugin filename="ignition-gazebo-contact-system"
+            name="ignition::gazebo::systems::Contact"/>
 
     <gravity>0 0 -9.81</gravity>
 

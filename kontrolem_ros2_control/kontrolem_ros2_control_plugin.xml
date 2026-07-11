@@ -19,4 +19,15 @@
       ros2_control.
     </description>
   </class>
+  <class name="kontrolem_ros2_control/BaseEstimatorController"
+         type="kontrolem_ros2_control::BaseEstimatorController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      M8: floating-base state estimator wrapper. Claims joint position/velocity +
+      per-foot contact interfaces, subscribes to the IMU, runs the ROS-free
+      kontrolem_estimation::BaseEstimator (contact-aided, InEKF-ready), and
+      publishes the estimated base pose/twist as nav_msgs/Odometry on /base_odom
+      for OdometryBaseBridge — the real-robot base source replacing sim ground truth.
+    </description>
+  </class>
 </library>
