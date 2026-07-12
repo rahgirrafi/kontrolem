@@ -1,0 +1,102 @@
+# M9 — commanded-posture demo for the Unitree Go2. SAME KontrolemController + WBC as the
+# standing demo (go2_stand_controllers.yaml), but reference_type: base_pose drives the base
+# through a canned squat/sway/tilt/yaw cycle (the WBC's Tracking dialect) instead of holding
+# a fixed setpoint. Feet stay planted throughout (this is postures, not locomotion). The
+# estimator (base_estimator) rides along so the demo also runs on the estimate
+# (base_source:=estimate) — the M8 closed-loop stress test under commanded motion.
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+    base_estimator:
+      type: kontrolem_ros2_control/BaseEstimatorController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: wbc
+    base_type: floating
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+    publish_diagnostics: true
+
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    base_gpio: floating_base
+    contact_gpio: contact
+
+    wbc.base_height: 0.2868
+    wbc.nominal_posture: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
+
+    # Commanded base motion (Tracking). base_pose = the canned cycle below; set to "live"
+    # to command the base offset interactively from the ~/base_target topic instead.
+    reference_type: base_pose
+    # Per base axis [x, y, z, roll, pitch, yaw]: amp*cos(omega*t + phase). Offline-proven
+    # (test_wbc_posture): squat gentle (vertical CoM is the bandwidth-limited axis), the
+    # rotations prominent; slow/deliberate so base position tracks tightly, feet planted.
+    reference.base.amp:   [0.010, 0.012, 0.015, 0.06, 0.05, 0.08]
+    reference.base.omega: [0.25,  0.20,  0.25,  0.30, 0.35, 0.25]
+    reference.base.phase: [2.5,   0.5,   0.0,   1.0,  1.5,  2.0]
+
+    # QP task gains. kp_post = 0: the posture task is a pure DAMPING regularizer during
+    # base tracking — pulling the joints to the standing nominal would fight the leg
+    # articulation the commanded base motion needs (e.g. a squat must bend the knees).
+    wbc.kp_base: 100.0
+    wbc.kd_base: 20.0
+    wbc.kp_post: 0.0
+    wbc.kd_post: 5.0
+    wbc.w_base: 100.0
+    wbc.w_post: 1.0
+    wbc.w_force: 0.0001
+    wbc.w_tau: 0.0001
+    wbc.mu: 0.5
+    wbc.tau_max: 23.7
+
+base_estimator:
+  ros__parameters:
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_gpio: contact
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    imu_topic: /imu/data
+    odom_topic: /base_odom
+    odom_frame: world
+    base_frame: base
+    base_height: 0.2868
+    gravity: 9.81
+    k_grav: 0.0
+    k_vel: 1.0
+    k_pos: 0.3
+    accel_gate: 0.5
+    gyro_gate: 0.5
+    innov_max: 0.15

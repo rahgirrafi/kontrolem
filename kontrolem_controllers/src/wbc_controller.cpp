@@ -18,7 +18,21 @@ WbcController::WbcController(
 
 Capabilities WbcController::capabilities() const
 {
-  return Capabilities{{Dialect::kRegulation}, /*needs_velocity_state=*/true};
+  // Regulation (fixed standing posture) + Tracking (a time-varying base-pose reference,
+  // e.g. BasePoseReference / LiveBaseTarget — commanded postures over planted feet).
+  return Capabilities{{Dialect::kRegulation, Dialect::kTracking}, /*needs_velocity_state=*/true};
+}
+
+void WbcController::sample_ref(const ControlProblem & problem, double t)
+{
+  if (problem.kind() == Dialect::kTracking) {
+    static_cast<const Tracking &>(problem).reference->sample(t, qref_, vref_, aref_, tauff_);
+  } else {
+    const auto & reg = static_cast<const Regulation &>(problem);
+    qref_ = reg.q_ref;
+    vref_ = reg.v_ref;
+    aref_.setZero();
+  }
 }
 
 std::unique_ptr<Synthesis> WbcController::synthesize(
@@ -30,7 +44,6 @@ std::unique_ptr<Synthesis> WbcController::synthesize(
 void WbcController::configure(
   const RobotModel & model, const Synthesis & /*synthesis*/, const ControlProblem & problem)
 {
-  const auto & reg = static_cast<const Regulation &>(problem);
   model_ = &model;
   nv_ = model.nv();
   nc_ = static_cast<int>(feet_.size());
@@ -115,11 +128,18 @@ void WbcController::configure(
   qdd_des_.setZero(nv_);
   command_.tau = Eigen::VectorXd::Zero(m_);
 
-  // Prime the QP at the nominal posture (v = 0) so setup fixes the sparsity.
+  // Reference buffers (q: nq, v/a: nv), then the initial reference (t = 0) to prime with.
+  qref_ = model.neutral();
+  vref_.setZero(nv_);
+  aref_.setZero(nv_);
+  tauff_.resize(0);
+  sample_ref(problem, 0.0);
+
+  // Prime the QP at the initial reference posture (v = 0) so setup fixes the sparsity.
   const Eigen::VectorXd v0 = Eigen::VectorXd::Zero(nv_);
-  model.dynamics(*ws_, reg.q_ref, v0, M_, h_);
-  model.contact_jacobian_stacked(*ws_, reg.q_ref, feet_, J_);
-  model.contact_drift(*ws_, reg.q_ref, v0, feet_, gamma_);
+  model.dynamics(*ws_, qref_, v0, M_, h_);
+  model.contact_jacobian_stacked(*ws_, qref_, feet_, J_);
+  model.contact_drift(*ws_, qref_, v0, feet_, gamma_);
   A_.block(row_dyn_, 0, nv_, nv_) = M_;
   A_.block(row_dyn_, off_lambda_, nv_, nl).noalias() = -J_.transpose();
   A_.block(row_con_, 0, nl, nv_) = J_;
@@ -132,14 +152,23 @@ void WbcController::configure(
 const Command & WbcController::compute(
   const State & state, const ControlProblem & problem, double /*dt*/)
 {
-  const auto & reg = static_cast<const Regulation &>(problem);
   const int nl = 3 * nc_;
 
-  // Frame-consistent PD task: qddot_des = -Kp (q ⊖ q_ref) - Kd v (all in the
-  // generalized tangent space, so the SE(3) base error is handled correctly).
-  // In-place difference into the preallocated buffer keeps compute() allocation-free.
-  model_->difference(reg.q_ref, state.q, e_);
-  qdd_des_.array() = -Kp_.array() * e_.array() - Kd_.array() * state.v.array();
+  // Reference this tick: a fixed setpoint (Regulation) or the trajectory at state.t
+  // (Tracking — a moving base-pose target for commanded postures). Alloc-free.
+  sample_ref(problem, state.t);
+
+  // Frame-consistent trajectory-tracking task in the generalized tangent space (so the
+  // SE(3) base error is handled correctly):
+  //   qddot_des = a_ref - Kp (q ⊖ q_ref) - Kd (v - v_ref).
+  // The reference velocity/accel feedforward (v_ref/a_ref, from the TrajectorySource)
+  // cancels the lag a pure moving setpoint would incur — without it the -Kd v damping
+  // fights the reference velocity. For Regulation, v_ref (≈0) and a_ref (=0) reduce this
+  // to the -Kp e - Kd v PD used M4-M8, byte-identical. In-place difference into the
+  // preallocated buffer keeps compute() allocation-free.
+  model_->difference(qref_, state.q, e_);
+  qdd_des_.array() =
+    aref_.array() - Kp_.array() * e_.array() - Kd_.array() * (state.v - vref_).array();
 
   // Instantaneous floating-base dynamics + contact geometry (into preallocated
   // buffers, by cached frame index — no per-tick name lookup or allocation).

@@ -34,7 +34,8 @@ def launch_setup(context, *args, **kwargs):
     bringup = get_package_share_directory("kontrolem_bringup")
 
     world_path = os.path.join(desc, "worlds", "go2.world.sdf")
-    ctrl_yaml = os.path.join(bringup, "config", "go2_stand_controllers.yaml")
+    # controllers:= selects the controller_manager yaml (stand vs the M9 posture demo).
+    ctrl_yaml = os.path.join(bringup, "config", LaunchConfiguration("controllers").perform(context))
     gz_urdf_template = os.path.join(desc, "urdf", "go2_gz.urdf")
     base_height = "0.2868"  # offline-proven (feet grounded); matches world anchor + yaml
     # base_source is baked into the generated URDF text, so resolve it now (perform).
@@ -133,5 +134,6 @@ def generate_launch_description():
         DeclareLaunchArgument("gui", default_value="false"),
         DeclareLaunchArgument("estimator", default_value="true"),
         DeclareLaunchArgument("base_source", default_value="ecm"),
+        DeclareLaunchArgument("controllers", default_value="go2_stand_controllers.yaml"),
         OpaqueFunction(function=launch_setup),
     ])

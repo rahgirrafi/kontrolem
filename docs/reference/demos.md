@@ -22,6 +22,7 @@
 | `quad_gz.launch.py` | floating quadruped | `wbc` | `quad_stand_controllers.yaml` | **WBC vs real contact:** the SAME WBC + SAME config as `quad_stand`, but the plant is Gazebo's own contact/friction solver (not pinned feet) — stands and rejects a real base shove (see below). Needs Gazebo installed. |
 | `go2_gz.launch.py` | **real Unitree Go2** | `wbc` | `go2_stand_controllers.yaml` | **WBC on a real robot model:** the SAME WBC, now retargeted to the actual Go2 (15 kg, real inertials) against Gazebo's contact solver — stands and rejects a 5000 N shove. Config + URDF only, zero controller-code change (see below). Needs Gazebo installed. |
 | `go2_gz.launch.py base_source:=estimate` | **real Unitree Go2** | `wbc` + `base_estimator` | `go2_stand_controllers.yaml` | **WBC on its OWN state estimate (sim-to-real):** the same Go2 stands and rejects a 5000 N shove using a **floating-base state estimator** (IMU + leg odometry + contact) instead of Gazebo ground truth — no oracle in the control loop (see below). Needs Gazebo installed. |
+| `go2_gz.launch.py controllers:=go2_posture_controllers.yaml` | **real Unitree Go2** | `wbc` (Tracking) | `go2_posture_controllers.yaml` | **Commanded postures:** the same WBC now MOVES the body — squat / sway / tilt / yaw over planted feet — driven by a base-pose reference (canned cycle, or a live `~/base_target` topic). Add `base_source:=estimate` to do it on the estimate (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -136,6 +137,37 @@ ground truth to **1.6 mm / 0.03°** in stance; **closed-loop**, the Go2 stands (
 0.289 m) and rejects a **5000 N** shove — recovering just as it does on ground truth — with
 the estimate tracking the true base to **< 7 mm / 0.01°** throughout, all with only the
 estimate in the loop. See [How-to → Estimate the floating-base state](../how-to/estimate-the-base-state.md).
+
+## Commanded postures — the body MOVES (`go2_posture`)
+
+Everything above *holds* one posture. `go2_posture` is the first step off "hold still": the
+**same WBC** commands the base to **squat, sway, tilt (roll/pitch), and yaw-twist** while the
+feet stay planted. This is not a new controller — the WBC already tracks whatever target
+posture it is handed via a frame-consistent SE(3) task, and it has exactly the 6 residual
+base DoF (feet planted) to move the trunk. M9 just feeds it a **time-varying** base-pose
+reference through the framework's existing [`Tracking` dialect](control-laws.md), so a
+quadruped moving its body and a cart-pole following a reference flow through the identical
+`compute(state, problem, dt)` shape. Two ways to drive it:
+
+- **`reference_type: base_pose`** — a canned per-axis harmonic cycle (amplitudes/speeds in
+  the yaml), reproducible for the e2e.
+- **`reference_type: live`** — a `~/base_target` (`geometry_msgs/Twist`) offset you publish
+  interactively (linear = translation, angular = roll/pitch/yaw), and the body moves there.
+
+```bash
+ros2 launch kontrolem_bringup go2_gz.launch.py controllers:=go2_posture_controllers.yaml
+ign topic -t /go2/detach -m ignition.msgs.Empty -p ""      # release the startup weld
+bash kontrolem_bringup/test/e2e_go2_posture.sh             # canned cycle + a live command
+bash kontrolem_bringup/test/e2e_go2_posture_closed.sh      # ...all on the M8 ESTIMATE
+```
+
+In Gazebo the Go2 executes the full cycle (squat ~28 mm, roll 7°, pitch 5.5°, yaw 9.4°,
+base stable) and — with `base_source:=estimate` — does it all **on its own estimate**, which
+keeps tracking the true base to **~2 mm / 0.02°** through the motion. Two findings worth
+knowing (see the how-to): the joint-posture task must become a pure damping *regularizer*
+(`kp_post: 0`) so it doesn't fight the leg articulation a base move needs, and base *height*
+is the bandwidth-limited axis — postures are slow and deliberate. See
+[How-to → Command the Go2's posture](../how-to/command-a-posture.md).
 
 ## Shared launch body
 

@@ -120,12 +120,19 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<bool>("publish_diagnostics", false);
     auto_declare<std::vector<double>>("q_ref", {});
     auto_declare<std::vector<double>>("v_ref", {});
-    // Reference: "setpoint" (Regulation) or "harmonic" (Tracking).
+    // Reference: "setpoint" (Regulation), "harmonic" (Tracking, fixed-base), or for the
+    // floating WBC "base_pose" (canned base motion) / "live" (~/base_target topic).
     auto_declare<std::string>("reference_type", "setpoint");
     auto_declare<std::vector<double>>("reference.center", {});
     auto_declare<std::vector<double>>("reference.amp", {});
     auto_declare<std::vector<double>>("reference.phase", {});
     auto_declare<double>("reference.omega", 0.5);
+    // M9 commanded base motion (6 axes: x,y,z, roll,pitch,yaw), for reference_type
+    // base_pose. amp*cos(omega*t + phase) per axis. Live mode reads ~/base_target instead.
+    auto_declare<std::vector<double>>("reference.base.amp", {});
+    auto_declare<std::vector<double>>("reference.base.omega", {});
+    auto_declare<std::vector<double>>("reference.base.phase", {});
+    auto_declare<std::string>("base_target_topic", "~/base_target");
     auto_declare<std::vector<double>>("lqr.q_diag", {});
     auto_declare<std::vector<double>>("lqr.r_diag", {});
     auto_declare<double>("lqr.q_dev_max", 0.5);
@@ -213,15 +220,58 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
       contact_gpio_ = node.get_parameter("contact_gpio").as_string();
       base_sensor_.emplace(base_gpio_);
       contact_sensor_.emplace(contact_gpio_, feet_);
-      auto reg = std::make_unique<kc::Regulation>();
-      reg->q_ref = model_->neutral();
-      reg->q_ref(2) = node.get_parameter("wbc.base_height").as_double();
+
+      // Nominal standing configuration: base at base_height + the nominal joint posture.
+      Eigen::VectorXd q_nominal = model_->neutral();
+      q_nominal(2) = node.get_parameter("wbc.base_height").as_double();
       const auto posture = node.get_parameter("wbc.nominal_posture").as_double_array();
       for (std::size_t k = 0; k < actuated_joints_.size() && k < posture.size(); ++k) {
-        reg->q_ref(model_->joint_q_index(actuated_joints_[k])) = posture[k];
+        q_nominal(model_->joint_q_index(actuated_joints_[k])) = posture[k];
       }
-      reg->v_ref = Eigen::VectorXd::Zero(nv);
-      problem_ = std::move(reg);
+
+      // reference_type selects: setpoint (Regulation = M4-M8 standing), base_pose (a
+      // canned base trajectory), or live (~/base_target topic). base_pose/live are the
+      // M9 commanded-posture modes and need the WBC's Tracking capability.
+      const auto ref_type = node.get_parameter("reference_type").as_string();
+      auto axes6 = [&](const std::string & p) {
+        const auto v = node.get_parameter(p).as_double_array();
+        std::array<double, 6> a{{0, 0, 0, 0, 0, 0}};
+        for (std::size_t i = 0; i < 6 && i < v.size(); ++i) a[i] = v[i];
+        return a;
+      };
+      if (ref_type == "base_pose") {
+        auto ref = std::make_unique<kc::BasePoseReference>();
+        ref->q_nominal = q_nominal;
+        ref->amp = axes6("reference.base.amp");
+        ref->omega = axes6("reference.base.omega");
+        ref->phase = axes6("reference.base.phase");
+        auto trk = std::make_unique<kc::Tracking>();
+        trk->reference = ref.get();
+        reference_ = std::move(ref);
+        problem_ = std::move(trk);
+        RCLCPP_INFO(node.get_logger(), "reference: base_pose (canned base trajectory)");
+      } else if (ref_type == "live") {
+        auto ref = std::make_unique<kc::LiveBaseTarget>();
+        ref->q_nominal = q_nominal;
+        live_target_ = ref.get();
+        auto trk = std::make_unique<kc::Tracking>();
+        trk->reference = ref.get();
+        reference_ = std::move(ref);
+        problem_ = std::move(trk);
+        base_target_buffer_.writeFromNonRT(std::array<double, 6>{{0, 0, 0, 0, 0, 0}});
+        base_target_sub_ = node.create_subscription<geometry_msgs::msg::Twist>(
+          node.get_parameter("base_target_topic").as_string(), rclcpp::SystemDefaultsQoS(),
+          [this](const geometry_msgs::msg::Twist::SharedPtr m) {
+            base_target_buffer_.writeFromNonRT(std::array<double, 6>{
+              {m->linear.x, m->linear.y, m->linear.z, m->angular.x, m->angular.y, m->angular.z}});
+          });
+        RCLCPP_INFO(node.get_logger(), "reference: live (~/base_target base offset)");
+      } else {
+        auto reg = std::make_unique<kc::Regulation>();
+        reg->q_ref = q_nominal;
+        reg->v_ref = Eigen::VectorXd::Zero(nv);
+        problem_ = std::move(reg);
+      }
     } else {
 
     // Build the problem: a fixed setpoint (Regulation) or a moving reference
@@ -463,6 +513,12 @@ controller_interface::return_type KontrolemController::update(
     }
   }
   state_.t = (time - start_time_).seconds();  // reference clock for Tracking
+
+  // Live posture command: copy the latest ~/base_target offset into the reference before
+  // compute (single-threaded here; the topic thread only writes the RealtimeBuffer).
+  if (live_target_ != nullptr) {
+    live_target_->offset = *base_target_buffer_.readFromRT();
+  }
 
   const kc::Command * u_ptr;
   const kc::Status * st_ptr;

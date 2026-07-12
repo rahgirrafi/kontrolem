@@ -17,6 +17,7 @@ find_package(std_msgs REQUIRED)
 find_package(kontrolem_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(kontrolem_control REQUIRED)
 find_package(kontrolem_model REQUIRED)
 find_package(kontrolem_controllers REQUIRED)
@@ -38,7 +39,7 @@ target_link_libraries(kontrolem_ros2_control PUBLIC
   kontrolem_estimation::kontrolem_estimation)
 ament_target_dependencies(kontrolem_ros2_control PUBLIC
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
-  realtime_tools std_msgs sensor_msgs nav_msgs kontrolem_msgs)
+  realtime_tools std_msgs sensor_msgs nav_msgs geometry_msgs kontrolem_msgs)
 
 # Register as a ros2_control controller plugin.
 pluginlib_export_plugin_description_file(controller_interface kontrolem_ros2_control_plugin.xml)
@@ -53,7 +54,7 @@ install(TARGETS kontrolem_ros2_control
 ament_export_targets(export_kontrolem_ros2_control HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
-  realtime_tools kontrolem_msgs sensor_msgs nav_msgs
+  realtime_tools kontrolem_msgs sensor_msgs nav_msgs geometry_msgs
   kontrolem_control kontrolem_model kontrolem_controllers kontrolem_estimation)
 
 ament_package()

@@ -20,6 +20,8 @@
 #include <vector>
 
 #include "controller_interface/controller_interface.hpp"
+#include "geometry_msgs/msg/twist.hpp"
+#include "kontrolem_control/base_reference.hpp"
 #include "kontrolem_control/controller.hpp"
 #include "kontrolem_control/supervisor.hpp"
 #include "kontrolem_model/robot_model.hpp"
@@ -27,8 +29,11 @@
 #include "kontrolem_ros2_control/contact_sensor.hpp"
 #include "kontrolem_msgs/msg/controller_diagnostics.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "realtime_tools/realtime_buffer.h"
 #include "realtime_tools/realtime_publisher.h"
 #include "std_msgs/msg/string.hpp"
+
+#include <array>
 
 namespace kontrolem_ros2_control
 {
@@ -75,6 +80,12 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr switch_sub_;
   std::mutex switch_mtx_;        // guards switch_request_ (topic thread vs RT update)
   std::string switch_request_;   // pending target name from the topic ("" = none)
+
+  // M9 live posture command: ~/base_target (geometry_msgs/Twist) -> a base offset
+  // [x,y,z, roll,pitch,yaw] the update() loop copies into the LiveBaseTarget each tick.
+  kontrolem_control::LiveBaseTarget * live_target_ = nullptr;  // non-owning (owned via reference_)
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr base_target_sub_;
+  realtime_tools::RealtimeBuffer<std::array<double, 6>> base_target_buffer_;
 
   // Floating-base (WBC) path: non-joint state (SE(3) base + contacts) enters via
   // <gpio> interfaces reassembled by the semantic components, and the actuated

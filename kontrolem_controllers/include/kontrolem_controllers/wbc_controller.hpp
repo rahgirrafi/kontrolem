@@ -14,9 +14,12 @@
 // with qddot_des = -Kp (q ⊖ q_ref) - Kd v            (frame-consistent PD task:
 // base pose/orientation + posture, in the generalized tangent space).
 //
-// Consumes the Regulation dialect (q_ref = the standing posture) — the SAME
-// problem type LQR/QP use, so a quadruped standing under a QP-WBC and a cart-pole
-// under a gain both flow through the identical compute(state, problem, dt) shape.
+// Consumes Regulation (q_ref = a fixed standing posture) AND Tracking (q_ref(t) from a
+// TrajectorySource, sampled each tick) — the SAME problem types LQR/QP use, so a
+// quadruped standing/moving under a QP-WBC and a cart-pole under a gain both flow through
+// the identical compute(state, problem, dt) shape. Tracking a floating-base reference
+// (BasePoseReference / LiveBaseTarget) is how the body is commanded to squat/sway/tilt/yaw
+// over planted feet (M9); Regulation is the degenerate constant case (M4-M8 standing).
 // Contact is scheduled all-stance here (Part D: no locomotion; the sim provides
 // ground-truth contact). Lives in kontrolem_controllers for now (like MpcController
 // — a flagged deviation from the per-paradigm-package plan, B10).
@@ -67,6 +70,10 @@ public:
   const Status & status() const override { return status_; }
 
 private:
+  // Sample the active problem's reference at time t into qref_/vref_/aref_ (alloc-free).
+  // Regulation -> the fixed setpoint; Tracking -> the TrajectorySource at t.
+  void sample_ref(const ControlProblem & problem, double t);
+
   // Design inputs.
   std::vector<std::string> feet_;
   std::vector<std::string> actuated_;
@@ -88,6 +95,7 @@ private:
   std::unique_ptr<RobotModel::Workspace> ws_;
   Eigen::MatrixXd M_, J_;
   Eigen::VectorXd h_, gamma_, e_, qdd_des_, W_;
+  Eigen::VectorXd qref_, vref_, aref_, tauff_;  // sampled reference (q: nq, v/a: nv)
   Eigen::MatrixXd A_;
   Eigen::VectorXd qcost_, l_, u_;
   Command command_;

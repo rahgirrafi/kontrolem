@@ -92,6 +92,13 @@ if(BUILD_TESTING)
     FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
   add_test(NAME wbc_standing COMMAND test_wbc_standing)
 
+  # M9: WBC tracks a commanded base-pose trajectory (squat/sway/tilt/yaw) with feet planted.
+  add_executable(test_wbc_posture test/test_wbc_posture.cpp)
+  target_link_libraries(test_wbc_posture kontrolem_controllers)
+  target_compile_definitions(test_wbc_posture PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME wbc_posture COMMAND test_wbc_posture)
+
   # Heterogeneous bumpless-transfer spike (Part D D1/D4): switch LQG <-> MPC at
   # runtime and measure the command discontinuity; naive (stale observer) vs
   # bumpless (observer seeded from state).
