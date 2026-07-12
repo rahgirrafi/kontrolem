@@ -65,14 +65,14 @@ All laws implement the `kontrolem_control::Controller` contract: `capabilities()
 | | |
 |---|---|
 | Method | Floating-base inverse-dynamics QP over `[q̈; λ; τ]`: dynamics equality `M q̈ + h = Sᵀτ + Jᵀλ`, no-slip contact `J q̈ = −γ`, friction pyramid `|λ_xy| ≤ μλ_z` + `λ_z ≥ 0`, torque limits; cost = frame-consistent tracking task `q̈_des = a_ref − Kp(q ⊖ q_ref) − Kd(v − v_ref)` + force/torque regularization. OSQP seam (tolerance 1e-4). |
-| Accepts | Regulation, Tracking |
+| Accepts | Regulation, Tracking, Locomotion |
 | Required state | Floating-base state: SE(3) base pose/twist + joint pos/vel (+ contact schedule). |
 | Heavy phase | none (`synthesize()` is a no-op). |
 | `compute()` | Sample the reference (`q_ref(t)` for Tracking, the fixed setpoint for Regulation), query dynamics + stacked contact Jacobian + contact drift, build + solve the QP, output `τ`. |
 | `status().ok` | QP solved. |
 | `status().margin` | Smallest friction-pyramid margin `μλ_z − max(|λ_x|,|λ_y|)` across feet (newtons). |
 | Params | `wbc.*` (see [Controller parameters](controller-parameters.md)) |
-| Scope | Standing / push-recovery, and **commanded postures** (squat/sway/tilt/yaw over planted feet) via a time-varying base-pose reference (`reference_type: base_pose` / `live` — the `Tracking` dialect; see [How-to → Command the Go2's posture](../how-to/command-a-posture.md)). Scheduled all-stance contact; no locomotion (feet never leave the ground). |
+| Scope | Standing / push-recovery, **commanded postures** (squat/sway/tilt/yaw over planted feet; the `Tracking` dialect), and a **static crawl WALK** (feet leave/rejoin the ground; the `Locomotion` dialect carries a `GaitSource` — a swinging foot gets zero force + a swing-arc task, the base tracks the support centroid; `reference_type: gait`; see [How-to → Make the Go2 walk](../how-to/make-the-go2-walk.md)). Dynamic gaits/running/jumping are later milestones. |
 
 ---
 
@@ -84,4 +84,4 @@ All laws implement the `kontrolem_control::Controller` contract: `capabilities()
 | `lqg` | Regulation | positions only | synthesize (2× Riccati) | no |
 | `mpc` | Regulation, Tracking | full | configure (condense) | yes (QP) |
 | `qp` | Regulation | full | none | yes (QP) |
-| `wbc` | Regulation, Tracking | floating base + contacts | none | yes (QP) |
+| `wbc` | Regulation, Tracking, Locomotion | floating base + contacts | none | yes (QP) |

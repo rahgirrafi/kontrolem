@@ -54,6 +54,7 @@ nav:
       - Push the Gazebo quadruped: how-to/push-the-gazebo-quadruped.md
       - Estimate the floating-base state: how-to/estimate-the-base-state.md
       - Command the Go2's posture: how-to/command-a-posture.md
+      - Make the Go2 walk: how-to/make-the-go2-walk.md
       - Verify an integration: how-to/verify-an-integration.md
       - Fix cmeel library errors: how-to/fix-cmeel-library-errors.md
   - Reference:

@@ -94,6 +94,8 @@ std::unique_ptr<kc::Controller> make_law(
     g.mu = node.get_parameter("wbc.mu").as_double();
     g.tau_max = node.get_parameter("wbc.tau_max").as_double();
     g.max_iter = static_cast<int>(node.get_parameter("wbc.max_iter").as_int());
+    g.kp_swing = node.get_parameter("wbc.kp_swing").as_double();
+    g.kd_swing = node.get_parameter("wbc.kd_swing").as_double();
     const auto feet = node.get_parameter("contact_frames").as_string_array();
     return std::make_unique<kctl::WbcController>(feet, actuated, g);
   }
@@ -133,6 +135,15 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<std::vector<double>>("reference.base.omega", {});
     auto_declare<std::vector<double>>("reference.base.phase", {});
     auto_declare<std::string>("base_target_topic", "~/base_target");
+    // M10 static crawl walk (reference_type: gait). order = per-cycle swing sequence of the
+    // contact_frames indices (default RL,FL,RR,FR); period/duty/step/base_gain shape it.
+    auto_declare<std::vector<int64_t>>("gait.order", {2, 0, 3, 1});
+    auto_declare<double>("gait.period", 12.0);
+    auto_declare<double>("gait.duty", 0.5);
+    auto_declare<double>("gait.step_len", 0.05);
+    auto_declare<double>("gait.step_h", 0.04);
+    auto_declare<double>("gait.base_gain", 1.0);
+    auto_declare<double>("gait.start_delay", 1.5);
     auto_declare<std::vector<double>>("lqr.q_diag", {});
     auto_declare<std::vector<double>>("lqr.r_diag", {});
     auto_declare<double>("lqr.q_dev_max", 0.5);
@@ -168,6 +179,8 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<double>("wbc.mu", 0.7);
     auto_declare<double>("wbc.tau_max", 40.0);
     auto_declare<int>("wbc.max_iter", 200);  // OSQP iteration cap (hard-RT bound)
+    auto_declare<double>("wbc.kp_swing", 400.0);  // swing-foot tracking (Locomotion)
+    auto_declare<double>("wbc.kd_swing", 40.0);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "on_init failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -266,6 +279,29 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
               {m->linear.x, m->linear.y, m->linear.z, m->angular.x, m->angular.y, m->angular.z}});
           });
         RCLCPP_INFO(node.get_logger(), "reference: live (~/base_target base offset)");
+      } else if (ref_type == "gait") {
+        // Static crawl walk. Nominal foot positions from FK on q_nominal; the CoM bias
+        // leads the base target forward so the CoM (not the base) sits over the support.
+        auto g = std::make_unique<kc::CrawlGait>();
+        g->q_nominal = q_nominal;
+        for (const auto & f : feet_) g->foot_nominal.push_back(model_->frame_position(q_nominal, f));
+        const auto ord = node.get_parameter("gait.order").as_integer_array();
+        for (std::size_t i = 0; i < 4 && i < ord.size(); ++i) g->order[i] = static_cast<int>(ord[i]);
+        g->period = node.get_parameter("gait.period").as_double();
+        g->duty = node.get_parameter("gait.duty").as_double();
+        g->step_len = node.get_parameter("gait.step_len").as_double();
+        g->step_h = node.get_parameter("gait.step_h").as_double();
+        g->base_gain = node.get_parameter("gait.base_gain").as_double();
+        g->start_delay = node.get_parameter("gait.start_delay").as_double();
+        const Eigen::Vector3d com0 = model_->center_of_mass(q_nominal);
+        g->com_bias_x = -com0.x();
+        g->com_bias_y = -com0.y();
+        auto loco = std::make_unique<kc::Locomotion>();
+        loco->gait = g.get();
+        gait_ = std::move(g);
+        problem_ = std::move(loco);
+        RCLCPP_INFO(node.get_logger(), "reference: gait (static crawl walk, period=%.1f)",
+                    node.get_parameter("gait.period").as_double());
       } else {
         auto reg = std::make_unique<kc::Regulation>();
         reg->q_ref = q_nominal;
@@ -571,11 +607,19 @@ controller_interface::return_type KontrolemController::update(
     if (problem_->kind() == kc::Dialect::kRegulation) {
       const auto & reg = static_cast<const kc::Regulation &>(*problem_);
       m.q_ref.assign(reg.q_ref.data(), reg.q_ref.data() + reg.q_ref.size());
-    } else {  // Tracking: snapshot the reference at the current time (telemetry path)
+    } else if (problem_->kind() == kc::Dialect::kTracking) {
+      // Snapshot the reference at the current time (telemetry path).
       Eigen::VectorXd vr(model_->nv()), ar(model_->nv()), tr(model_->nv());
       qref_buf_.resize(model_->nq());
       static_cast<const kc::Tracking &>(*problem_).reference->sample(state_.t, qref_buf_, vr, ar, tr);
       m.q_ref.assign(qref_buf_.data(), qref_buf_.data() + qref_buf_.size());
+    } else if (problem_->kind() == kc::Dialect::kLocomotion) {
+      // Snapshot the gait's base reference (a Locomotion carries a GaitSource, NOT a
+      // TrajectorySource — casting it to Tracking here was the M10 first-tick crash).
+      gait_plan_buf_.resize(feet_.size(), model_->nq(), model_->nv());
+      static_cast<const kc::Locomotion &>(*problem_).gait->sample(state_.t, gait_plan_buf_);
+      m.q_ref.assign(gait_plan_buf_.q_ref.data(),
+                     gait_plan_buf_.q_ref.data() + gait_plan_buf_.q_ref.size());
     }
     m.ok = st.ok;
     m.margin = st.margin;

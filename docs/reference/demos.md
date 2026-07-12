@@ -23,6 +23,7 @@
 | `go2_gz.launch.py` | **real Unitree Go2** | `wbc` | `go2_stand_controllers.yaml` | **WBC on a real robot model:** the SAME WBC, now retargeted to the actual Go2 (15 kg, real inertials) against Gazebo's contact solver — stands and rejects a 5000 N shove. Config + URDF only, zero controller-code change (see below). Needs Gazebo installed. |
 | `go2_gz.launch.py base_source:=estimate` | **real Unitree Go2** | `wbc` + `base_estimator` | `go2_stand_controllers.yaml` | **WBC on its OWN state estimate (sim-to-real):** the same Go2 stands and rejects a 5000 N shove using a **floating-base state estimator** (IMU + leg odometry + contact) instead of Gazebo ground truth — no oracle in the control loop (see below). Needs Gazebo installed. |
 | `go2_gz.launch.py controllers:=go2_posture_controllers.yaml` | **real Unitree Go2** | `wbc` (Tracking) | `go2_posture_controllers.yaml` | **Commanded postures:** the same WBC now MOVES the body — squat / sway / tilt / yaw over planted feet — driven by a base-pose reference (canned cycle, or a live `~/base_target` topic). Add `base_source:=estimate` to do it on the estimate (see below). Needs Gazebo installed. |
+| `go2_gz.launch.py controllers:=go2_walk_controllers.yaml` | **real Unitree Go2** | `wbc` (Locomotion) | `go2_walk_controllers.yaml` | **Static crawl WALK:** the same WBC now WALKS the Go2 forward — one foot swings at a time (lift, step, place) while the base shifts over the support triangle, statically stable, feet leaving/rejoining the ground (see below). Needs Gazebo installed. |
 
 ## Switching controllers live (multi-controller Supervisor)
 
@@ -168,6 +169,35 @@ knowing (see the how-to): the joint-posture task must become a pure damping *reg
 (`kp_post: 0`) so it doesn't fight the leg articulation a base move needs, and base *height*
 is the bandwidth-limited axis — postures are slow and deliberate. See
 [How-to → Command the Go2's posture](../how-to/command-a-posture.md).
+
+## Static crawl WALK — feet leave the ground (`go2_walk`)
+
+Everything above keeps all four feet planted. `go2_walk` is the first demo where **feet
+leave the ground**: the **same WBC** walks the Go2 forward with a statically-stable **crawl
+gait** — one foot swings at a time (lift, step forward, place) while the base shifts to keep
+the CoM over the triangle of the three supporting feet. This is not a new controller — the
+WBC gains a *swing-foot task* (a swinging foot gets zero contact force and instead tracks a
+lift-forward-place arc) and a per-tick stance mask, fed by a ROS-free `CrawlGait` through the
+[`Locomotion` dialect](control-laws.md). It stays statically stable throughout (offline the
+CoM holds ~7 cm inside the support polygon every tick).
+
+```bash
+ros2 launch kontrolem_bringup go2_gz.launch.py controllers:=go2_walk_controllers.yaml
+ign topic -t /go2/detach -m ignition.msgs.Empty -p ""     # release the startup weld
+bash kontrolem_bringup/test/e2e_go2_walk.sh               # walks forward, upright, stepping
+```
+
+In Gazebo the Go2 walks forward, upright (roll/pitch < 1.5°), swaying laterally as it shifts
+weight between steps. See [How-to → Make the Go2 walk](../how-to/make-the-go2-walk.md).
+
+!!! note "Walking on the estimate is the frontier"
+    `base_source:=estimate` (walking on the M8 estimate, `e2e_go2_walk_closed.sh`) is a
+    **report-only probe**, not a solid demo. Standing/postures on the estimate are rock-solid,
+    but **locomotion** stresses leg odometry: during stepping the sensed foot contact flickers
+    and a briefly-mis-sensed swing foot can poison the leg-odometry velocity solve, so the
+    estimate sometimes tracks well and sometimes diverges. A flat-ground height pin stops a
+    slow height drift and a gentle gait helps, but the general fix is a full **InEKF** (the
+    deferred estimator upgrade). The solid M10 deliverable is the ground-truth walk.
 
 ## Shared launch body
 

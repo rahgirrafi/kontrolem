@@ -139,8 +139,15 @@ public:
   Eigen::Vector3d center_of_mass(const Eigen::VectorXd & q) const;
 
   /// World-frame position of a named frame (e.g. a foot / contact point) at q.
-  /// Throws std::runtime_error if the frame does not exist.
+  /// Throws std::runtime_error if the frame does not exist. ALLOCATES (fresh Data) —
+  /// off the RT path; the frame-index + Workspace overload below is the RT path.
   Eigen::Vector3d frame_position(const Eigen::VectorXd & q, const std::string & frame) const;
+
+  /// Real-time, allocation-free world-frame position of a frame, reusing the caller's
+  /// Workspace (no per-call Pinocchio Data). Resolve `frame_id` once via frame_index().
+  /// The RT path a WBC uses for a swing foot's current position each tick.
+  Eigen::Vector3d frame_position(
+    Workspace & ws, const Eigen::VectorXd & q, std::size_t frame_id) const;
 
   /// Translational contact Jacobian (3 x nv) of a named frame, world-aligned:
   ///   v_world = J · v_generalized.

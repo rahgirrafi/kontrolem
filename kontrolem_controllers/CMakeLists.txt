@@ -99,6 +99,20 @@ if(BUILD_TESTING)
     FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
   add_test(NAME wbc_posture COMMAND test_wbc_posture)
 
+  # M10 Step 1: WBC swing-foot task + time-varying contact — one foot lifts, arcs, lands.
+  add_executable(test_wbc_step test/test_wbc_step.cpp)
+  target_link_libraries(test_wbc_step kontrolem_controllers)
+  target_compile_definitions(test_wbc_step PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME wbc_step COMMAND test_wbc_step)
+
+  # M10 Step 2: WBC static crawl walk — all four feet cycle, walks forward, statically stable.
+  add_executable(test_wbc_crawl test/test_wbc_crawl.cpp)
+  target_link_libraries(test_wbc_crawl kontrolem_controllers)
+  target_compile_definitions(test_wbc_crawl PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME wbc_crawl COMMAND test_wbc_crawl)
+
   # Heterogeneous bumpless-transfer spike (Part D D1/D4): switch LQG <-> MPC at
   # runtime and measure the command discontinuity; naive (stale observer) vs
   # bumpless (observer seeded from state).

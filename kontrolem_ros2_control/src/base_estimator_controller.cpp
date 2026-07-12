@@ -32,6 +32,7 @@ CallbackReturn BaseEstimatorController::on_init()
     auto_declare<double>("accel_gate", 0.5);
     auto_declare<double>("gyro_gate", 0.5);
     auto_declare<double>("innov_max", 0.15);
+    auto_declare<bool>("flat_ground", false);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "on_init failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -76,6 +77,7 @@ CallbackReturn BaseEstimatorController::on_configure(const rclcpp_lifecycle::Sta
   cfg.accel_gate = node.get_parameter("accel_gate").as_double();
   cfg.gyro_gate = node.get_parameter("gyro_gate").as_double();
   cfg.innov_max = node.get_parameter("innov_max").as_double();
+  cfg.flat_ground = node.get_parameter("flat_ground").as_bool();
   try {
     estimator_.emplace(*model_, cfg);
   } catch (const std::exception & e) {

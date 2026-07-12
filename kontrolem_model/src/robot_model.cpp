@@ -189,6 +189,14 @@ Eigen::Vector3d RobotModel::frame_position(
   return data.oMf[model.getFrameId(frame)].translation();
 }
 
+Eigen::Vector3d RobotModel::frame_position(
+  Workspace & ws, const Eigen::VectorXd & q, std::size_t frame_id) const
+{
+  auto & data = ws.impl_->data;  // preallocated -> allocation-free
+  pinocchio::framesForwardKinematics(impl_->model, data, q);
+  return data.oMf[frame_id].translation();
+}
+
 Eigen::MatrixXd RobotModel::contact_jacobian(
   const Eigen::VectorXd & q, const std::string & frame) const
 {

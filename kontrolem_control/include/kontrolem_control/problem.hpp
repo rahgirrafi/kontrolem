@@ -11,6 +11,7 @@
 
 #include <Eigen/Dense>
 
+#include "kontrolem_control/gait.hpp"
 #include "kontrolem_control/trajectory.hpp"
 
 namespace kontrolem_control
@@ -23,6 +24,7 @@ enum class Dialect
   kRegulation,  ///< drive the state to a fixed setpoint
   kTracking,    ///< follow a time-varying reference
   kTaskSpec,    ///< weighted task hierarchy + constraints (later, WBC/MPC)
+  kLocomotion,  ///< follow a gait plan (per-foot contact schedule + swing + base ref)
 };
 
 /// Base of every problem the framework can pose to a controller.
@@ -53,6 +55,17 @@ struct Tracking : ControlProblem
   const TrajectorySource * reference{nullptr};
 
   Dialect kind() const override { return Dialect::kTracking; }
+};
+
+/// Walk: follow a GaitSource (sampled each tick) that carries the per-foot contact
+/// schedule + swing-foot target + base-pose reference. Consumed by the WBC, which
+/// constrains stance feet, tracks the swing foot along its arc, and moves the base to
+/// keep the CoM statically stable. The source is referenced, not owned (runtime-owned).
+struct Locomotion : ControlProblem
+{
+  const GaitSource * gait{nullptr};
+
+  Dialect kind() const override { return Dialect::kLocomotion; }
 };
 
 }  // namespace kontrolem_control

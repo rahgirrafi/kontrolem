@@ -18,14 +18,23 @@ WbcController::WbcController(
 
 Capabilities WbcController::capabilities() const
 {
-  // Regulation (fixed standing posture) + Tracking (a time-varying base-pose reference,
-  // e.g. BasePoseReference / LiveBaseTarget — commanded postures over planted feet).
-  return Capabilities{{Dialect::kRegulation, Dialect::kTracking}, /*needs_velocity_state=*/true};
+  // Regulation (fixed posture) + Tracking (commanded base motion over planted feet) +
+  // Locomotion (a gait plan — walking, with feet leaving/rejoining the ground).
+  return Capabilities{
+    {Dialect::kRegulation, Dialect::kTracking, Dialect::kLocomotion},
+    /*needs_velocity_state=*/true};
 }
 
 void WbcController::sample_ref(const ControlProblem & problem, double t)
 {
-  if (problem.kind() == Dialect::kTracking) {
+  if (problem.kind() == Dialect::kLocomotion) {
+    // Sample the gait plan (fills plan_: stance mask + swing targets + base ref). The base
+    // task uses the base reference; the per-foot contact loop in compute() uses plan_.
+    static_cast<const Locomotion &>(problem).gait->sample(t, plan_);
+    qref_ = plan_.q_ref;
+    vref_ = plan_.v_ref;
+    aref_.setZero();
+  } else if (problem.kind() == Dialect::kTracking) {
     static_cast<const Tracking &>(problem).reference->sample(t, qref_, vref_, aref_, tauff_);
   } else {
     const auto & reg = static_cast<const Regulation &>(problem);
@@ -128,11 +137,13 @@ void WbcController::configure(
   qdd_des_.setZero(nv_);
   command_.tau = Eigen::VectorXd::Zero(m_);
 
-  // Reference buffers (q: nq, v/a: nv), then the initial reference (t = 0) to prime with.
+  // Reference buffers (q: nq, v/a: nv) + the gait plan buffer, then the initial reference
+  // (t = 0) to prime with.
   qref_ = model.neutral();
   vref_.setZero(nv_);
   aref_.setZero(nv_);
   tauff_.resize(0);
+  plan_.resize(static_cast<std::size_t>(nc_), model.nq(), nv_);
   sample_ref(problem, 0.0);
 
   // Prime the QP at the initial reference posture (v = 0) so setup fixes the sparsity.
@@ -182,6 +193,29 @@ const Command & WbcController::compute(
   A_.block(row_con_, 0, nl, nv_) = J_;
   l_.segment(row_dyn_, nv_) = -h_;  u_.segment(row_dyn_, nv_) = -h_;
   l_.segment(row_con_, nl) = -gamma_;  u_.segment(row_con_, nl) = -gamma_;
+
+  // Locomotion: per-foot toggle stance vs swing (no QP resize). Default (set above) is
+  // all-stance no-slip. A SWING foot instead gets zero contact force — unilateral bound
+  // λ_z ∈ [0,0], which via the friction pyramid forces λ_xy = 0 too — and its no-slip row
+  // becomes a swing TASK  J_i q̈ = a_swing_i − γ_i,  a_swing = Kp_s(p* − p) + Kd_s(v* − J_i v),
+  // driving the free foot along its arc. Stance feet restore λ_z ≥ 0.
+  if (problem.kind() == Dialect::kLocomotion) {
+    for (int i = 0; i < nc_; ++i) {
+      const auto fi = static_cast<std::size_t>(i);
+      if (plan_.stance[fi]) {
+        u_(row_uni_ + i) = kBig;
+      } else {
+        const Eigen::Vector3d p = model_->frame_position(*ws_, state.q, feet_ids_[fi]);
+        const Eigen::Vector3d vfoot = J_.block(3 * i, 0, 3, nv_) * state.v;
+        const Eigen::Vector3d a_sw =
+          g_.kp_swing * (plan_.swing_pos[fi] - p) + g_.kd_swing * (plan_.swing_vel[fi] - vfoot);
+        l_.segment(row_con_ + 3 * i, 3) = a_sw - gamma_.segment(3 * i, 3);
+        u_.segment(row_con_ + 3 * i, 3) = a_sw - gamma_.segment(3 * i, 3);
+        u_(row_uni_ + i) = 0.0;
+      }
+    }
+  }
+
   for (int i = 0; i < nv_; ++i) qcost_(i) = -2.0 * W_(i) * qdd_des_(i);
 
   const Eigen::VectorXd & z = qp_.solve(qcost_, l_, u_, A_);

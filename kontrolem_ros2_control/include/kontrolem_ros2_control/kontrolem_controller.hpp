@@ -57,8 +57,9 @@ private:
   // Core (ROS-free) objects.
   std::optional<kontrolem_model::RobotModel> model_;
   std::unique_ptr<kontrolem_control::Controller> law_;             // single-law mode
-  std::unique_ptr<kontrolem_control::ControlProblem> problem_;      // Regulation or Tracking
+  std::unique_ptr<kontrolem_control::ControlProblem> problem_;      // Regulation/Tracking/Locomotion
   std::unique_ptr<kontrolem_control::TrajectorySource> reference_;  // owned when Tracking
+  std::unique_ptr<kontrolem_control::GaitSource> gait_;             // owned when Locomotion
   kontrolem_control::State state_;
   rclcpp::Time start_time_;  // set on_activate; drives State::t for Tracking
 
@@ -105,6 +106,7 @@ private:
   bool publish_diagnostics_{false};
   std::string control_law_;
   Eigen::VectorXd qref_buf_;  // reference snapshot for the message
+  kontrolem_control::GaitPlan gait_plan_buf_;  // gait snapshot for the message (Locomotion)
   using DiagMsg = kontrolem_msgs::msg::ControllerDiagnostics;
   std::shared_ptr<rclcpp::Publisher<DiagMsg>> diag_pub_;
   std::unique_ptr<realtime_tools::RealtimePublisher<DiagMsg>> rt_diag_;

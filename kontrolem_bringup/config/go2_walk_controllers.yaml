@@ -1,0 +1,106 @@
+# M10 — static crawl WALK demo for the Unitree Go2. SAME KontrolemController + WBC as the
+# standing/posture demos, but reference_type: gait drives a CrawlGait: one foot swings at a
+# time (lift, step forward, place) while the base shifts to keep the CoM over the support
+# triangle — so the Go2 WALKS FORWARD, statically stable throughout. The estimator rides
+# along, so the walk also runs on the estimate (base_source:=estimate).
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+    base_estimator:
+      type: kontrolem_ros2_control/BaseEstimatorController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: wbc
+    base_type: floating
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+    publish_diagnostics: true
+
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    base_gpio: floating_base
+    contact_gpio: contact
+
+    wbc.base_height: 0.2868
+    wbc.nominal_posture: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
+
+    # Static crawl walk. order = swing sequence of contact_frames indices (RL, FL, RR, FR).
+    # One foot swings at a time (duty of its quarter-cycle); the base tracks the support
+    # centroid (held over the current triangle during a swing, pre-shifted during the
+    # all-stance margin). Offline-proven params (test_wbc_crawl); tune in-sim if needed.
+    reference_type: gait
+    gait.order: [2, 0, 3, 1]
+    gait.period: 14.0
+    gait.duty: 0.5
+    gait.step_len: 0.04
+    gait.step_h: 0.045
+    gait.base_gain: 1.0
+    gait.start_delay: 6.0   # hold nominal until well after the startup weld is released
+
+    # QP task gains. kp_post = 0: posture is a pure damping regularizer so the swing leg is
+    # free to follow its arc (as M9). kp_swing/kd_swing track the swing foot to its target.
+    wbc.kp_base: 100.0
+    wbc.kd_base: 20.0
+    wbc.kp_post: 0.0
+    wbc.kd_post: 5.0
+    wbc.w_base: 100.0
+    wbc.w_post: 1.0
+    wbc.w_force: 0.0001
+    wbc.w_tau: 0.0001
+    wbc.mu: 0.5
+    wbc.tau_max: 23.7
+    wbc.kp_swing: 400.0
+    wbc.kd_swing: 40.0
+
+base_estimator:
+  ros__parameters:
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_gpio: contact
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    imu_topic: /imu/data
+    odom_topic: /base_odom
+    odom_frame: world
+    base_frame: base
+    base_height: 0.2868
+    gravity: 9.81
+    k_grav: 0.0
+    k_vel: 1.0
+    k_pos: 0.3
+    accel_gate: 0.5
+    gyro_gate: 0.5
+    innov_max: 0.15
+    flat_ground: true   # WALK: pin re-anchored foot heights so leg-odometry z can't drift

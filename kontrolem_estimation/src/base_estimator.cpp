@@ -82,10 +82,13 @@ void BaseEstimator::seed(
 
   // Anchor the feet currently in stance at their FK world positions.
   assemble_q(q_joints);
+  double zsum = 0.0;
   for (std::size_t i = 0; i < cfg_.contact_frames.size(); ++i) {
     anchors_[i] = model_.frame_position(q_full_, cfg_.contact_frames[i]);
     prev_stance_[i] = (i < stance.size()) ? stance[i] : 0;
+    zsum += anchors_[i].z();
   }
+  ground_z_ = cfg_.contact_frames.empty() ? 0.0 : zsum / cfg_.contact_frames.size();
   status_ = Status{};
 }
 
@@ -158,6 +161,9 @@ void BaseEstimator::correct(
       const Eigen::Vector3d fw = model_.frame_position(q_full_, cfg_.contact_frames[i]);
       if (!prev_stance_[i]) {
         anchors_[i] = fw;               // just landed -> new anchor, no correction
+        // Flat-ground height pin: keep the new anchor at the established ground level so
+        // leg-odometry HEIGHT cannot drift step-to-step (xy still re-anchors for progress).
+        if (cfg_.flat_ground) anchors_[i].z() = ground_z_;
       } else {
         perr += (anchors_[i] - fw);     // world position should not have moved
         ++cnt;

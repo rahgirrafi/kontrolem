@@ -65,6 +65,10 @@ struct BaseEstimatorConfig
                            ///< alone tracks attitude (lateral accel would fool the aid)
   double innov_max = 0.15; ///< health: stance velocity-constraint residual bound (m/s)
   double damping = 1e-6;   ///< Tikhonov damping for the base-velocity least-squares solve
+  bool flat_ground = false;  ///< pin re-anchored foot HEIGHTS to the seed ground level, so
+                             ///< leg-odometry height cannot drift step-to-step (a flat-floor
+                             ///< assumption for WALKING; xy still re-anchors for progress).
+                             ///< The general (terrain) case is the deferred InEKF's job.
 };
 
 class BaseEstimator
@@ -122,6 +126,7 @@ private:
   std::vector<int> qidx_, vidx_;              ///< per actuated joint: full q / v index
   std::vector<Eigen::Vector3d> anchors_;      ///< per foot: world anchor while in stance
   std::vector<uint8_t> prev_stance_;
+  double ground_z_ = 0.0;                     ///< seed ground height (flat_ground height pin)
 
   // Preallocated per-tick buffers (allocation-free correct()).
   Eigen::VectorXd q_full_, vj_full_;

@@ -54,6 +54,8 @@ public:
     double mu{0.7};          ///< friction coefficient (pyramid)
     double tau_max{40.0};    ///< per-joint torque limit
     int max_iter{200};       ///< OSQP iteration cap (hard-RT bound; nominal is ~1 order below)
+    double kp_swing{400.0};  ///< swing-foot position tracking stiffness (Locomotion)
+    double kd_swing{40.0};   ///< swing-foot velocity damping (Locomotion)
   };
 
   WbcController(
@@ -96,6 +98,7 @@ private:
   Eigen::MatrixXd M_, J_;
   Eigen::VectorXd h_, gamma_, e_, qdd_des_, W_;
   Eigen::VectorXd qref_, vref_, aref_, tauff_;  // sampled reference (q: nq, v/a: nv)
+  GaitPlan plan_;                               // sampled gait plan (Locomotion path)
   Eigen::MatrixXd A_;
   Eigen::VectorXd qcost_, l_, u_;
   Command command_;
