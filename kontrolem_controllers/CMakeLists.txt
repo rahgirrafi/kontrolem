@@ -44,6 +44,7 @@ ament_export_dependencies(Eigen3 kontrolem_control kontrolem_model)
 
 if(BUILD_TESTING)
   find_package(kontrolem_locomotion REQUIRED)  # concrete gaits used by the walk tests
+  find_package(kontrolem_estimation REQUIRED)  # InEKF for the closed-on-estimate trot harness (M15)
   add_executable(test_lqr_cartpole test/test_lqr_cartpole.cpp)
   target_link_libraries(test_lqr_cartpole kontrolem_controllers)
   target_compile_definitions(test_lqr_cartpole PRIVATE
@@ -121,6 +122,15 @@ if(BUILD_TESTING)
   target_compile_definitions(test_wbc_trot PRIVATE
     FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
   add_test(NAME wbc_trot COMMAND test_wbc_trot)
+
+  # M15 Step 0: WBC trot closed ON THE ESTIMATE (InEKF in the loop) — the diagnostic harness that
+  # reproduces M14's estimate-tip frontier offline. No add_test yet: Step 0 is report-only (run the
+  # binary directly for the diagnosis); the upright + bounded-error assertion lands in M15 Step 2.
+  add_executable(test_wbc_trot_estimate test/test_wbc_trot_estimate.cpp)
+  target_link_libraries(test_wbc_trot_estimate kontrolem_controllers
+    kontrolem_locomotion::kontrolem_locomotion kontrolem_estimation::kontrolem_estimation)
+  target_compile_definitions(test_wbc_trot_estimate PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
 
   # M13 Step 3: kinematic (model-free) trot — TrotGait timing + per-leg IK + joint PD.
   add_executable(test_kinematic_gait test/test_kinematic_gait.cpp)

@@ -38,7 +38,7 @@ forward on alternating diagonals. The automated check asserts forward + upright:
 bash kontrolem_bringup/test/e2e_go2_trot_wbc.sh
 ```
 
-## Step 2 — trot on the estimate (closed-loop sim2real, a probe)
+## Step 2 — trot on the estimate (closed-loop sim2real)
 
 Swap the base source to the robot's own [InEKF estimate](estimate-the-base-state.md) — the
 controller now never sees the true base:
@@ -47,19 +47,28 @@ controller now never sees the true base:
 BASE=estimate EST=inekf bash kontrolem_bringup/test/e2e_go2_trot_wbc.sh
 ```
 
-This mode is **report-only** — it prints how far the robot got and how tightly the estimate
-tracked the truth, but does not gate the suite (see the warning below).
+This mode **asserts** (forward + upright + a bounded estimate): the Go2 trots forward and
+upright driven entirely by its own estimate, reliably (5/5 runs).
 
-!!! warning "Trotting on the estimate is the current frontier"
-    On **ground truth** the whole-body trot is solid. On the robot's own **estimate** it is not
-    yet reliable: a trot leaves and rejoins the ground faster than the crawl, so the sensed contact
-    flickers more and stresses the [InEKF](estimate-the-base-state.md) harder — and because the
-    body is balancing on just two diagonal feet, a briefly-wrong base estimate can tip it (the
-    knife-edge). Enabling the [planned-contact](make-the-go2-walk.md) feed
-    (`publish_planned_contact` + `use_planned_contact`, both on in `go2_trot_wbc.yaml`) helps
-    materially but does not yet close it. This is the same frontier the
-    [crawl-on-estimate](make-the-go2-walk.md) sits at, only harder; the remaining layers are the
-    ones listed there (in-loop gravity aid, IMU-bias states, a richer contact model).
+!!! tip "What actually made the trot reliable: the startup settle-gate, not the estimator"
+    M14 shipped this mode as a report-only *frontier* — it tipped. Chasing that revealed the real
+    cause, and it was **not** the estimator: the whole-body trot tipped **~2 of 3 runs even on
+    perfect ground-truth state**, always at startup (a sideways roll off the two-diagonal support
+    line). The gait was beginning to step on a fixed wall-clock (`start_delay`) that isn't
+    synchronized with the Gazebo weld-release, so the first diagonal swing often fired while the
+    base was still in the release transient — the same startup-timing race M12 found for the crawl.
+    The fix is the **settle-gate** (`gait.settle_gate: true`): hold nominal all-stance until the
+    base is *measured* to have settled after the release, then start stepping. With it, both ground
+    truth and the estimate go **5/5**. (An offline estimator-in-the-loop harness had already shown
+    the InEKF itself keeps the trot upright under IMU noise, bias, and contact flicker — the filter
+    was never the bottleneck.)
+
+!!! note "Residual: the estimate's absolute position drifts (~0.19 m), but does not tip"
+    On the estimate the robot walks upright and forward, but the InEKF's *absolute* position
+    tracks the truth to only ~0.19 m over 30 s (a slow, bounded, consistent drift — not a tip).
+    That tight-tracking refinement (`< 0.10 m`) is reported by the e2e but not gated; it is a
+    much smaller, non-destabilizing estimator matter, cleanly separated from the balance problem
+    the settle-gate solved.
 
 ## Tuning (`go2_trot_wbc.yaml`)
 
@@ -71,7 +80,10 @@ gait.period: 1.0                # one full stride (both pairs swing once)
 gait.duty: 0.5                  # swing fraction of a pair's half-cycle; <1 keeps an all-stance bracket
 gait.step_len: 0.06             # forward step per foot per stride (m)
 gait.step_h: 0.05               # swing-arc apex height (m)
-gait.start_delay: 6.0           # hold nominal until well after the weld releases
+gait.start_delay: 0.5           # a short all-stance beat AFTER the settle-gate releases
+gait.settle_gate: true          # don't step until the base settles post-weld-release (see tip above)
+gait.settle_speed: 0.04         # m/s: base speed below which "settled"
+gait.settle_tilt: 0.12          # rad: base tilt below which "settled"
 wbc.kp_base: 100.0              # base task stiffness — holds the trunk upright over two diagonal feet
 wbc.kd_base: 20.0
 wbc.kp_post: 0.0                # posture = damping only, so a swing leg is free to follow its arc

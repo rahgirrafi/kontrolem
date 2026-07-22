@@ -64,6 +64,24 @@ private:
   kontrolem_control::State state_;
   rclcpp::Time start_time_;  // set on_activate; drives State::t for Tracking
 
+  // Startup settle-gate (M15): a floating-base gait must not begin stepping on a fixed
+  // wall-clock, because that clock is unsynchronized with the Gazebo weld-release and the
+  // first diagonal swing then fires mid-transient and tips the robot off its support line
+  // (the M12 startup-timing race, confirmed on the WBC trot). When enabled, the gait runs on
+  // a clock ZEROED at the moment the base is measured to have settled AFTER the release
+  // transient. Opt-in (gait.settle_gate); applies only to Locomotion on a floating base, so
+  // Regulation/Tracking (standing/posture) and the fixed-base path are untouched.
+  bool settle_gate_{false};
+  bool gait_released_{false};      // the gate has released; gait clock is running
+  bool release_seen_{false};       // the weld-release transient has been observed
+  double t_release_{0.0};          // state_.t at gate release (gait clock origin)
+  double settle_accum_{0.0};       // sustained-settle timer (s)
+  double settle_release_speed_{0.08};  // base speed (m/s) that marks the release transient
+  double settle_speed_{0.04};      // base speed (m/s) below which "settled"
+  double settle_tilt_{0.12};       // base tilt (rad) below which "settled"
+  double settle_hold_{0.3};        // settle must persist this long (s) before stepping
+  double settle_timeout_{15.0};    // hard fallback (s): step anyway if never detected
+
   // Config.
   std::vector<std::string> actuated_joints_;
   std::string command_interface_{"effort"};

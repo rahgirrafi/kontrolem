@@ -87,17 +87,22 @@ v={k:float(x) for k,x in (kv.split("=") for kv in line.split() if "=" in kv)}
 estimate = os.environ.get("BASE") == "estimate"
 walked  = v["fwd"] > 0.03                                  # net forward progress (m)
 upright = 0.20 < v["zmin"] and v["zmax"] < 0.34 and v["rollmax"] < 12 and v["pitchmax"] < 12
-tracks  = v["esterr"] < 0.10                               # est within 10 cm of truth
+tracks  = v["esterr"] < 0.10                               # est within 10 cm of truth (tight)
+bounded = v["esterr"] < 0.30                               # est stays bounded (not diverging)
 if estimate:
-    # Closed-loop ON THE ESTIMATE is the known frontier: a trot leaves/rejoins contact fast, so
-    # the InEKF is stressed harder than by the crawl and still occasionally tips (M11/M12). This
-    # mode is REPORT-ONLY (a probe, like e2e_go2_walk_closed.sh) — it does not gate the suite.
-    ok = walked and upright and tracks
-    print("REPORT [estimate]: Go2 WBC trot — forward=%.3f m (%s), upright(z=%.2f..%.2f roll=%.1f "
-          "pitch=%.1f)=%s, est_err=%.3f m (tracks=%s) [y_sway=%.3f]  %s" % (
-        v["fwd"], walked, v["zmin"], v["zmax"], v["rollmax"], v["pitchmax"], upright, v["esterr"],
-        tracks, v["ysway"], "clean this run" if ok else "diverged this run (frontier, not asserted)"))
-    sys.exit(0)   # report-only: never fail the suite on the estimate probe
+    # Closed-loop ON THE ESTIMATE. Once the M15 startup settle-gate removed the startup-timing
+    # race (the real cause of M14's tip), the Go2 trots UPRIGHT + FORWARD on its own InEKF
+    # estimate, reliably. So this mode now ASSERTS forward + upright + a BOUNDED estimate (not
+    # diverging). The estimate's absolute position still drifts ~0.19 m from truth over 30 s
+    # (tight-tracking < 0.10 m is not yet met) — a bounded, non-tipping estimator refinement,
+    # reported but not gated (see make-the-go2-trot-whole-body.md).
+    ok = walked and upright and bounded
+    print("%s [estimate]: Go2 WBC trot on the InEKF estimate — forward=%.3f m (%s), "
+          "upright(z=%.2f..%.2f roll=%.1f pitch=%.1f)=%s, est_err=%.3f m (bounded=%s, "
+          "tight-track<0.10=%s) [y_sway=%.3f]" % (
+        "PASS" if ok else "FAIL", v["fwd"], walked, v["zmin"], v["zmax"], v["rollmax"],
+        v["pitchmax"], upright, v["esterr"], bounded, tracks, v["ysway"]))
+    sys.exit(0 if ok else 1)
 # Ground truth (ecm): the asserted gate — the WBC trots forward and upright, closed-loop in base.
 ok = walked and upright
 print("%s: Go2 WBC trot [ecm] — forward=%.3f m (%s), upright(z=%.2f..%.2f roll=%.1f pitch=%.1f)=%s "

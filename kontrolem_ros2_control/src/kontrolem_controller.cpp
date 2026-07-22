@@ -163,6 +163,14 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<double>("gait.base_gain", 1.0);
     auto_declare<double>("gait.start_delay", 1.5);
     auto_declare<std::vector<int64_t>>("gait.swing_pair", {0, 1, 1, 0});  // trot diagonal pairs
+    // M15 startup settle-gate: hold the gait until the base settles after the weld-release,
+    // instead of stepping on a fixed wall-clock (which races the release and tips the trot).
+    auto_declare<bool>("gait.settle_gate", false);
+    auto_declare<double>("gait.settle_release_speed", 0.08);  // m/s marking the release transient
+    auto_declare<double>("gait.settle_speed", 0.04);          // m/s below which "settled"
+    auto_declare<double>("gait.settle_tilt", 0.12);           // rad below which "settled"
+    auto_declare<double>("gait.settle_hold", 0.3);            // s the settle must persist
+    auto_declare<double>("gait.settle_timeout", 15.0);        // s hard fallback: step anyway
     auto_declare<double>("kin.kp", 60.0);
     auto_declare<double>("kin.kd", 2.0);
     auto_declare<double>("kin.tau_max", 23.7);
@@ -448,6 +456,14 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
           pc_pub_);
     }
 
+    // M15 startup settle-gate config (effective only for a floating-base Locomotion problem).
+    settle_gate_ = node.get_parameter("gait.settle_gate").as_bool();
+    settle_release_speed_ = node.get_parameter("gait.settle_release_speed").as_double();
+    settle_speed_ = node.get_parameter("gait.settle_speed").as_double();
+    settle_tilt_ = node.get_parameter("gait.settle_tilt").as_double();
+    settle_hold_ = node.get_parameter("gait.settle_hold").as_double();
+    settle_timeout_ = node.get_parameter("gait.settle_timeout").as_double();
+
     state_.q = Eigen::VectorXd::Zero(nq);
     state_.v = Eigen::VectorXd::Zero(nv);  // stays zero if the law is output-feedback
 
@@ -505,6 +521,7 @@ InterfaceConfiguration KontrolemController::state_interface_configuration() cons
 CallbackReturn KontrolemController::on_activate(const rclcpp_lifecycle::State &)
 {
   start_time_ = get_node()->now();  // t=0 for the Tracking reference clock
+  gait_released_ = false; release_seen_ = false; t_release_ = 0.0; settle_accum_ = 0.0;  // reset gate
 
   const auto find = [](const auto & ifaces, const std::string & name) -> std::size_t {
     for (std::size_t i = 0; i < ifaces.size(); ++i) {
@@ -605,6 +622,31 @@ controller_interface::return_type KontrolemController::update(
     }
   }
   state_.t = (time - start_time_).seconds();  // reference clock for Tracking
+
+  // M15 startup settle-gate: hold a floating-base gait at pre-start (nominal all-stance — the
+  // WBC just stabilizes the stance, which settles the robot) until the base has SETTLED after
+  // the weld-release, then run the gait on a clock zeroed at that moment. This removes the
+  // startup-timing race that tips the trot ~2/3 of runs even on ground truth (M12). Both gait
+  // sample sites read state_.t, so gating it here is sufficient. Locomotion + floating only.
+  if (settle_gate_ && floating_ && problem_ && problem_->kind() == kc::Dialect::kLocomotion) {
+    if (!gait_released_) {
+      const double speed = state_.v.head<3>().norm();  // base linear speed (frame-invariant norm)
+      const double r22 = 1.0 - 2.0 * (state_.q[3] * state_.q[3] + state_.q[4] * state_.q[4]);
+      const double tilt = std::acos(std::max(-1.0, std::min(1.0, r22)));  // body-up vs world-up
+      if (speed > settle_release_speed_ || tilt > settle_tilt_) release_seen_ = true;
+      const bool settled = speed < settle_speed_ && tilt < settle_tilt_;
+      settle_accum_ = (release_seen_ && settled) ? settle_accum_ + period.seconds() : 0.0;
+      const bool timed_out = state_.t > settle_timeout_;
+      if ((release_seen_ && settle_accum_ >= settle_hold_) || timed_out) {
+        gait_released_ = true;
+        t_release_ = state_.t;
+        RCLCPP_INFO(
+          get_node()->get_logger(), "gait settle-gate: released at t=%.2fs (%s)", state_.t,
+          timed_out ? "timeout fallback" : "base settled after release");
+      }
+    }
+    state_.t = gait_released_ ? (state_.t - t_release_) : 0.0;  // pre-start hold while gating
+  }
 
   // Live posture command: copy the latest ~/base_target offset into the reference before
   // compute (single-threaded here; the topic thread only writes the RealtimeBuffer).

@@ -22,6 +22,7 @@
 
   <test_depend>ament_cmake_test</test_depend>
   <test_depend>kontrolem_locomotion</test_depend>
+  <test_depend>kontrolem_estimation</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

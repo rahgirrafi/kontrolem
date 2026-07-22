@@ -64,7 +64,16 @@ kontrolem_controller:
     gait.duty: 0.5
     gait.step_len: 0.06
     gait.step_h: 0.05
-    gait.start_delay: 6.0   # hold nominal until well after the startup weld is released
+    gait.start_delay: 0.5   # a short all-stance beat AFTER the settle-gate releases
+    # M15 startup settle-gate: don't step on a fixed wall-clock (it races the weld-release and
+    # tips the trot ~2/3 of runs, even on ground truth — the M12 startup-timing race). Instead
+    # hold nominal until the base is measured to have SETTLED after the release transient.
+    gait.settle_gate: true
+    gait.settle_release_speed: 0.08   # m/s: speed spike that marks the weld letting go
+    gait.settle_speed: 0.04           # m/s: below this (sustained) the base is settled
+    gait.settle_tilt: 0.12            # rad (~7deg): below this the base is upright enough
+    gait.settle_hold: 0.3             # s: settle must persist this long before the first step
+    gait.settle_timeout: 15.0         # s: hard fallback — step anyway if never cleanly detected
 
     # QP task gains. kp_post = 0: posture is a pure damping regularizer so a swing leg is free to
     # follow its arc; the swing task (kp_swing/kd_swing) tracks the flight feet, the base task
