@@ -31,6 +31,7 @@
 #include "rclcpp_lifecycle/state.hpp"
 #include "realtime_tools/realtime_buffer.h"
 #include "realtime_tools/realtime_publisher.h"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "std_msgs/msg/string.hpp"
 
 #include <array>
@@ -110,6 +111,13 @@ private:
   using DiagMsg = kontrolem_msgs::msg::ControllerDiagnostics;
   std::shared_ptr<rclcpp::Publisher<DiagMsg>> diag_pub_;
   std::unique_ptr<realtime_tools::RealtimePublisher<DiagMsg>> rt_diag_;
+
+  // Planned contact schedule (opt-in, RT-safe): when running a Locomotion problem the gait
+  // KNOWS which foot is planted each tick. Publishing that lets the state estimator use the
+  // PLAN instead of the flickering sensed contact (M12) — the fix for reliable walk-on-estimate.
+  bool publish_planned_contact_{false};
+  std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float64MultiArray>> pc_pub_;
+  std::unique_ptr<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>> rt_pc_;
 
   // Interface indices resolved by name in on_activate().
   std::vector<std::size_t> pos_idx_;  // per model joint

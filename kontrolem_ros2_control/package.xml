@@ -28,6 +28,7 @@
   <depend>kontrolem_control</depend>
   <depend>kontrolem_model</depend>
   <depend>kontrolem_controllers</depend>
+  <depend>kontrolem_locomotion</depend>
   <depend>kontrolem_estimation</depend>
 
   <export>

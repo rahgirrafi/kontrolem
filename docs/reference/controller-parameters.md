@@ -33,13 +33,28 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `reference_type` | string | `setpoint` | `setpoint` → Regulation; `harmonic` → Tracking with the built-in harmonic source. |
+| `reference_type` | string | `setpoint` | `setpoint` → Regulation; `harmonic` → Tracking (harmonic source); `base_pose`/`live` → Tracking a base target; `gait` → Locomotion with a **crawl** gait (WBC); `trot` → Locomotion with a **diagonal trot** gait (WBC or `kinematic_gait`). |
 | `q_ref` | double[] | `[]` | Setpoint configuration, length `nq` (used when `reference_type: setpoint`). |
 | `v_ref` | double[] | `[]` | Setpoint velocity, length `nv`. |
 | `reference.center` | double[] | `[]` | Harmonic per-coordinate center, length `nq`. |
 | `reference.amp` | double[] | `[]` | Harmonic per-coordinate amplitude, length `nq`. `0` holds a coordinate fixed. |
 | `reference.phase` | double[] | `[]` | Harmonic per-coordinate phase (rad), length `nq`. |
 | `reference.omega` | double | `0.5` | Harmonic angular frequency (rad/s). |
+
+### Gait / locomotion (`reference_type: gait` or `trot`)
+
+The runtime builds the gait from FK on the nominal stance (`wbc.base_height` + `wbc.nominal_posture`). Consumed by the WBC (`gait` and `trot`) and the kinematic-gait controller (`trot`).
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `gait.order` | int[4] | `[2,0,3,1]` | **Crawl** (`gait`): foot swing order, as contact-frame indices. |
+| `gait.swing_pair` | int[4] | `[0,1,1,0]` | **Trot** (`trot`): diagonal pair per foot ({FL,RR}=0, {FR,RL}=1). |
+| `gait.period` | double | `12.0` | One full gait cycle (s). Crawl = all four feet; trot = both diagonal pairs. |
+| `gait.duty` | double | `0.5` | Swing fraction of a foot's window; `<1` leaves an all-stance (double-support) margin. |
+| `gait.step_len` | double | `0.05` | Forward step per foot per cycle (m). |
+| `gait.step_h` | double | `0.04` | Swing-arc apex height (m). |
+| `gait.base_gain` | double | `1.0` | **Crawl** only: how fully the base tracks the support-polygon centroid. |
+| `gait.start_delay` | double | `1.5` | Hold nominal (no stepping) this long before the gait begins. |
 
 ## LQR (`control_law: lqr`)
 
@@ -99,6 +114,19 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 | `wbc.mu` | double | `0.7` | Friction coefficient (linearized pyramid). |
 | `wbc.tau_max` | double | `40.0` | Per-joint torque limit. |
 | `wbc.max_iter` | int | `200` | OSQP iteration cap (hard-RT solve-time bound; nominal standing/recovery is ~50). Hitting it yields `ok = false` → supervisor fallback. |
+
+## Kinematic gait (`control_law: kinematic_gait`)
+
+Model-free walking. Also uses `contact_frames` and the nominal stance (`wbc.base_height`, `wbc.nominal_posture`) the gait is built around, plus a `trot` reference (`gait.*` above).
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `kin.kp` | double | `60.0` | Joint position stiffness (→ torque). Must hold the stance legs — there is **no** gravity compensation. |
+| `kin.kd` | double | `2.0` | Joint velocity damping. |
+| `kin.tau_max` | double | `23.7` | Per-joint torque clamp. |
+| `kin.ik_max_iter` | int | `20` | Per-leg Gauss-Newton iteration cap (hard-RT bound). |
+| `kin.ik_tol` | double | `1e-6` | Foot-position convergence tolerance (m). |
+| `kin.ik_step_clamp` | double | `0.5` | Max Δq per IK iteration (rad) — singularity guard. |
 
 ## Notes
 

@@ -9,6 +9,9 @@
 #include "kontrolem_controllers/mpc_controller.hpp"
 #include "kontrolem_controllers/qp_task_space_controller.hpp"
 #include "kontrolem_controllers/wbc_controller.hpp"
+#include "kontrolem_controllers/kinematic_gait_controller.hpp"
+#include "kontrolem_locomotion/crawl_gait.hpp"
+#include "kontrolem_locomotion/trot_gait.hpp"
 #include "pluginlib/class_list_macros.hpp"
 
 namespace kontrolem_ros2_control
@@ -99,7 +102,19 @@ std::unique_ptr<kc::Controller> make_law(
     const auto feet = node.get_parameter("contact_frames").as_string_array();
     return std::make_unique<kctl::WbcController>(feet, actuated, g);
   }
-  throw std::runtime_error("unknown control_law '" + law + "' (expected lqr/lqg/mpc/qp/wbc)");
+  if (law == "kinematic_gait") {
+    kctl::KinematicGaitController::Gains g;
+    g.kp = node.get_parameter("kin.kp").as_double();
+    g.kd = node.get_parameter("kin.kd").as_double();
+    g.tau_max = node.get_parameter("kin.tau_max").as_double();
+    g.ik_max_iter = static_cast<int>(node.get_parameter("kin.ik_max_iter").as_int());
+    g.ik_tol = node.get_parameter("kin.ik_tol").as_double();
+    g.ik_step_clamp = node.get_parameter("kin.ik_step_clamp").as_double();
+    const auto feet = node.get_parameter("contact_frames").as_string_array();
+    return std::make_unique<kctl::KinematicGaitController>(feet, actuated, g);
+  }
+  throw std::runtime_error(
+    "unknown control_law '" + law + "' (expected lqr/lqg/mpc/qp/wbc/kinematic_gait)");
 }
 }  // namespace
 
@@ -120,6 +135,9 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<std::string>("state_velocity_interface", "velocity");
     auto_declare<std::string>("safe_action", "zero");
     auto_declare<bool>("publish_diagnostics", false);
+    // Publish the gait's planned per-foot contact schedule for the estimator (M12).
+    auto_declare<bool>("publish_planned_contact", false);
+    auto_declare<std::string>("planned_contact_topic", "/planned_contact");
     auto_declare<std::vector<double>>("q_ref", {});
     auto_declare<std::vector<double>>("v_ref", {});
     // Reference: "setpoint" (Regulation), "harmonic" (Tracking, fixed-base), or for the
@@ -144,6 +162,13 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<double>("gait.step_h", 0.04);
     auto_declare<double>("gait.base_gain", 1.0);
     auto_declare<double>("gait.start_delay", 1.5);
+    auto_declare<std::vector<int64_t>>("gait.swing_pair", {0, 1, 1, 0});  // trot diagonal pairs
+    auto_declare<double>("kin.kp", 60.0);
+    auto_declare<double>("kin.kd", 2.0);
+    auto_declare<double>("kin.tau_max", 23.7);
+    auto_declare<int>("kin.ik_max_iter", 20);
+    auto_declare<double>("kin.ik_tol", 1.0e-6);
+    auto_declare<double>("kin.ik_step_clamp", 0.5);
     auto_declare<std::vector<double>>("lqr.q_diag", {});
     auto_declare<std::vector<double>>("lqr.r_diag", {});
     auto_declare<double>("lqr.q_dev_max", 0.5);
@@ -282,7 +307,7 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
       } else if (ref_type == "gait") {
         // Static crawl walk. Nominal foot positions from FK on q_nominal; the CoM bias
         // leads the base target forward so the CoM (not the base) sits over the support.
-        auto g = std::make_unique<kc::CrawlGait>();
+        auto g = std::make_unique<kontrolem_locomotion::CrawlGait>();
         g->q_nominal = q_nominal;
         for (const auto & f : feet_) g->foot_nominal.push_back(model_->frame_position(q_nominal, f));
         const auto ord = node.get_parameter("gait.order").as_integer_array();
@@ -301,6 +326,25 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
         gait_ = std::move(g);
         problem_ = std::move(loco);
         RCLCPP_INFO(node.get_logger(), "reference: gait (static crawl walk, period=%.1f)",
+                    node.get_parameter("gait.period").as_double());
+      } else if (ref_type == "trot") {
+        // Dynamic diagonal trot (M13/M14). Nominal feet from FK; base held at nominal (no
+        // support-centroid shift) and advanced forward — see kontrolem_locomotion::TrotGait.
+        auto g = std::make_unique<kontrolem_locomotion::TrotGait>();
+        g->q_nominal = q_nominal;
+        for (const auto & f : feet_) g->foot_nominal.push_back(model_->frame_position(q_nominal, f));
+        const auto sp = node.get_parameter("gait.swing_pair").as_integer_array();
+        for (std::size_t i = 0; i < 4 && i < sp.size(); ++i) g->swing_pair[i] = static_cast<int>(sp[i]);
+        g->period = node.get_parameter("gait.period").as_double();
+        g->duty = node.get_parameter("gait.duty").as_double();
+        g->step_len = node.get_parameter("gait.step_len").as_double();
+        g->step_h = node.get_parameter("gait.step_h").as_double();
+        g->start_delay = node.get_parameter("gait.start_delay").as_double();
+        auto loco = std::make_unique<kc::Locomotion>();
+        loco->gait = g.get();
+        gait_ = std::move(g);
+        problem_ = std::move(loco);
+        RCLCPP_INFO(node.get_logger(), "reference: trot (dynamic diagonal trot, period=%.2f)",
                     node.get_parameter("gait.period").as_double());
       } else {
         auto reg = std::make_unique<kc::Regulation>();
@@ -390,6 +434,18 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
     if (publish_diagnostics_) {
       diag_pub_ = node.create_publisher<DiagMsg>("~/diagnostics", rclcpp::SystemDefaultsQoS());
       rt_diag_ = std::make_unique<realtime_tools::RealtimePublisher<DiagMsg>>(diag_pub_);
+    }
+
+    // Opt-in planned-contact publisher (M12): the gait's per-foot stance schedule, so the
+    // estimator can trust the PLAN instead of the flickering sensed contact while walking.
+    publish_planned_contact_ = node.get_parameter("publish_planned_contact").as_bool();
+    if (publish_planned_contact_) {
+      const auto topic = node.get_parameter("planned_contact_topic").as_string();
+      pc_pub_ = node.create_publisher<std_msgs::msg::Float64MultiArray>(
+        topic, rclcpp::SystemDefaultsQoS());
+      rt_pc_ =
+        std::make_unique<realtime_tools::RealtimePublisher<std_msgs::msg::Float64MultiArray>>(
+          pc_pub_);
     }
 
     state_.q = Eigen::VectorXd::Zero(nq);
@@ -594,6 +650,24 @@ controller_interface::return_type KontrolemController::update(
       "status not ok (margin=%.3f) — applying safe action '%s'", st.margin, safe_action_.c_str());
   }
 
+  // Sample the gait once if a Locomotion consumer (telemetry or planned-contact) needs it.
+  const bool is_loco = problem_->kind() == kc::Dialect::kLocomotion;
+  if (is_loco && (publish_diagnostics_ || publish_planned_contact_)) {
+    gait_plan_buf_.resize(feet_.size(), model_->nq(), model_->nv());
+    static_cast<const kc::Locomotion &>(*problem_).gait->sample(state_.t, gait_plan_buf_);
+  }
+
+  // Planned contact (M12): publish the gait's per-foot stance (1 = planted, 0 = swing) so the
+  // estimator can trust the PLAN instead of the flickering sensed contact while walking.
+  if (publish_planned_contact_ && is_loco && rt_pc_ && rt_pc_->trylock()) {
+    auto & msg = rt_pc_->msg_;
+    msg.data.resize(feet_.size());
+    for (std::size_t i = 0; i < feet_.size(); ++i) {
+      msg.data[i] = gait_plan_buf_.stance[i] ? 1.0 : 0.0;
+    }
+    rt_pc_->unlockAndPublish();
+  }
+
   // Opt-in telemetry (RT-safe: best-effort trylock; skipped if the reader holds).
   if (publish_diagnostics_ && rt_diag_ && rt_diag_->trylock()) {
     const double us =
@@ -613,11 +687,9 @@ controller_interface::return_type KontrolemController::update(
       qref_buf_.resize(model_->nq());
       static_cast<const kc::Tracking &>(*problem_).reference->sample(state_.t, qref_buf_, vr, ar, tr);
       m.q_ref.assign(qref_buf_.data(), qref_buf_.data() + qref_buf_.size());
-    } else if (problem_->kind() == kc::Dialect::kLocomotion) {
-      // Snapshot the gait's base reference (a Locomotion carries a GaitSource, NOT a
+    } else if (is_loco) {
+      // gait_plan_buf_ was already sampled above (a Locomotion carries a GaitSource, NOT a
       // TrajectorySource — casting it to Tracking here was the M10 first-tick crash).
-      gait_plan_buf_.resize(feet_.size(), model_->nq(), model_->nv());
-      static_cast<const kc::Locomotion &>(*problem_).gait->sample(state_.t, gait_plan_buf_);
       m.q_ref.assign(gait_plan_buf_.q_ref.data(),
                      gait_plan_buf_.q_ref.data() + gait_plan_buf_.q_ref.size());
     }

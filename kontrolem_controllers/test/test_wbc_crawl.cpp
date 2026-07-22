@@ -11,12 +11,12 @@
 
 #include <Eigen/Dense>
 
-#include "kontrolem_control/gait.hpp"
+#include "kontrolem_locomotion/crawl_gait.hpp"
 #include "kontrolem_control/problem.hpp"
 #include "kontrolem_controllers/wbc_controller.hpp"
 #include "kontrolem_model/robot_model.hpp"
 
-using kontrolem_control::CrawlGait;
+using kontrolem_locomotion::CrawlGait;
 using kontrolem_control::GaitPlan;
 using kontrolem_control::Locomotion;
 using kontrolem_control::State;

@@ -53,18 +53,43 @@ wbc.kp_post: 0.0           # posture = damping only, so the swing leg is free (a
     support triangle before each step. Larger/faster steps shrink the stability margin.
     Start gentle.
 
-!!! warning "Walking on the estimate is not yet reliable"
+!!! warning "Walking on the estimate is improved but not yet fully reliable"
     `base_source:=estimate` walks on the robot's own [state estimate](estimate-the-base-state.md)
     instead of ground truth. Standing and postures on the estimate are solid, but **walking**
     stresses leg odometry: when feet leave and rejoin the ground the sensed contact flickers,
-    and a briefly-mis-sensed swing foot can corrupt the leg-odometry velocity — so the estimate
-    sometimes tracks and sometimes diverges. `wbc.kp_post: 0`, a `flat_ground: true` height pin
-    on the estimator, and a gentle gait all help, but the general fix is a full **InEKF**
-    (the deferred estimator upgrade). Run `e2e_go2_walk_closed.sh` to probe it.
+    and a briefly-mis-sensed swing foot can corrupt it. The **InEKF** (`estimator_type:=inekf`,
+    M11) is the covariance-weighted estimator that handles this — it walks forward & upright in
+    most runs and tighter than the M8 complementary filter (which poisons a shared
+    least-squares), but it **still occasionally diverges**. Full reliability needs the next
+    layer: feeding the gait's **planned** contact schedule to the estimator (killing the sensed
+    flicker at the source) and/or IMU-bias states. `wbc.kp_post: 0`, a `flat_ground` height
+    pin, and a gentle gait all help. Probe it with:
+
+    ```bash
+    EST=inekf bash kontrolem_bringup/test/e2e_go2_walk_closed.sh          # M11 InEKF
+    EST=complementary bash kontrolem_bringup/test/e2e_go2_walk_closed.sh  # M8 baseline
+    ```
 
 ## What this is (and isn't)
 
 This is a **statically-stable crawl** — always three feet down, the CoM inside their
 triangle. It is the stepping stone to **dynamic** locomotion (trot, run, jump), where the
-robot is balanced by momentum rather than a static support polygon — a separate, larger
-milestone with its own balance controller.
+robot is balanced by momentum rather than a static support polygon. A model-free **dynamic
+trot** already ships — see [Make the Go2 trot](make-the-go2-trot.md).
+
+## The Go2 walks four ways
+
+Walking is a **showcase** of the framework's range: the *same* Go2, in the *same* world, driven
+by structurally different controllers behind the one `compute()` contract — change a single
+`control_law:` line to switch paradigm.
+
+| Controller | `control_law` | What it is | Config |
+|---|---|---|---|
+| Kinematic trot | `kinematic_gait` | Model-free: gait → IK → joint PD. No dynamics/estimator; open-loop. | `go2_trot_kinematic.yaml` — [how-to](make-the-go2-trot.md) |
+| Whole-body crawl | `wbc` | Inverse-dynamics QP: contact forces, friction, torque limits; closed-loop base. | `go2_walk_controllers.yaml` (this page) |
+| Whole-body trot | `wbc` | The same QP as the crawl, driven by the diagonal trot gait — force-aware, closed-loop, straighter than the model-free trot. | `go2_trot_wbc.yaml` — [how-to](make-the-go2-trot-whole-body.md) |
+| Convex MPC + WBC | *(planned)* | An optimal-control planning layer over the WBC. | — |
+| RL policy | *(planned)* | A learned MLP loaded via synthesize=train / configure=load / compute=infer. | — |
+
+The model-free trot is the simplest and most robust in sim; the WBC adds force awareness and
+closed-loop base regulation. Two more paradigms (MPC, RL) round out the showcase.

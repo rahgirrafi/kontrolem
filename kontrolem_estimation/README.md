@@ -1,8 +1,10 @@
 # kontrolem_estimation
 
-A ROS-free floating-base **state estimator** for a legged robot. The `BaseEstimator`
-fuses an IMU with leg odometry (stance-foot kinematics) to estimate the base
-pose/twist — the quantities a real robot has no ground-truth oracle for.
+A ROS-free floating-base **state estimator** for a legged robot. Two filters — the
+`BaseEstimator` (contact-aided complementary) and the `InvariantEstimator` (Contact-Aided
+Right-Invariant EKF) — fuse an IMU with leg odometry (stance-foot kinematics) to estimate
+the base pose/twist, the quantities a real robot has no ground-truth oracle for. Both
+implement one `IStateEstimator` interface, so the runtime selects between them by a param.
 
 ## Purpose
 
@@ -13,11 +15,18 @@ the last missing piece of the sim-to-real path: with it, the whole-body controll
 stands (and later walks) on an *estimate* of the base state rather than on simulator
 ground truth.
 
-The estimator is a **contact-aided complementary / leg-odometry filter**, right-sized
-and provably drift-bounded for standing, behind an **InEKF-ready** interface: the state
-is an SE_2(3) element `(R, v, p)` and the API is `predict()` / `correct()`, so a full
-invariant EKF can drop into the same boundary later (alongside the future
-locomotion-control milestone) without touching any caller.
+Both estimators carry an SE_2(3) state `(R, v, p)` behind a `seed()` / `predict()` /
+`correct()` API (`IStateEstimator`):
+
+- **`BaseEstimator`** (M8) — a **contact-aided complementary / leg-odometry filter** with
+  fixed blend gains. Rock-solid and provably drift-bounded for **standing and postures**.
+- **`InvariantEstimator`** (M11) — a **Contact-Aided Right-Invariant EKF** that additionally
+  carries a covariance and per-foot contact-point states `d_i`, and corrects the base from
+  each stance foot's forward-kinematics measurement *weighted by confidence* (with
+  median-residual innovation gating). This is the estimator for **walking** (feet leaving and
+  rejoining the ground): offline it tracks ~3.4× tighter than the complementary filter under
+  contact-sensing flicker, because a mis-sensed foot is rejected instead of poisoning a shared
+  least-squares. No IMU-bias states in v1 (a documented `+6` extension).
 
 ## Dependencies and build instructions
 
@@ -32,7 +41,9 @@ locomotion-control milestone) without touching any caller.
   ```bash
   P="$HOME/.local/lib/python3.10/site-packages/cmeel.prefix"
   LD_LIBRARY_PATH="$P/lib:$P/lib64:$LD_LIBRARY_PATH" \
-    ./build/kontrolem_estimation/test_base_estimator
+    ./build/kontrolem_estimation/test_base_estimator        # M8 complementary filter
+  LD_LIBRARY_PATH="$P/lib:$P/lib64:$LD_LIBRARY_PATH" \
+    ./build/kontrolem_estimation/test_invariant_estimator   # M11 InEKF (+ A/B walk proof)
   ```
 
 ## Relation to other packages
@@ -59,12 +70,12 @@ controllers require. Like the controllers, its core is ROS-free and Pinocchio-on
 
 - Estimate the floating-base pose/twist for a standing quadruped from IMU + leg odometry,
   so control closes on the estimate (sim-to-real).
-- A stable, swappable base for future work: keep the `(R, v, p)` / `predict`/`correct`
-  interface and replace the internals with a full InEKF when dynamic locomotion exists to
-  exercise it.
+- For **walking**, select the `InvariantEstimator` — same interface, robust to the
+  contact-sensing flicker that stepping produces.
 
-Out of scope: InEKF internals, gait/locomotion control, magnetometer yaw aiding, and
-tuning to a specific physical IMU.
+Out of scope: gait/locomotion control, magnetometer yaw aiding, IMU-bias estimation (the
+documented InEKF `+6` extension), uneven-terrain contact geometry, and tuning to a specific
+physical IMU.
 
 ## How to use it
 
@@ -89,4 +100,13 @@ const auto q = est.orientation();             // world<-base quaternion
 const auto v_body = est.velocity_body();      // body-frame linear velocity (REP-145)
 const auto w_body = est.angular_body();       // body-frame angular velocity
 if (!est.status().ok) { /* stance constraint residual too large */ }
+```
+
+For walking, swap the type — the interface is identical:
+
+```cpp
+#include "kontrolem_estimation/invariant_estimator.hpp"
+InvariantEstimatorConfig icfg;
+icfg.contact_frames = { /* … */ };  icfg.actuated_joints = { /* … */ };
+InvariantEstimator est(model, icfg);   // same seed/predict/correct/state() calls as above
 ```

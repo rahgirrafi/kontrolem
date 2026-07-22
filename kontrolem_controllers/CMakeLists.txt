@@ -20,7 +20,8 @@ add_library(kontrolem_controllers SHARED
   src/mpc_controller.cpp
   src/qp_solver.cpp
   src/qp_task_space_controller.cpp
-  src/wbc_controller.cpp)
+  src/wbc_controller.cpp
+  src/kinematic_gait_controller.cpp)
 target_include_directories(kontrolem_controllers PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
@@ -42,6 +43,7 @@ ament_export_targets(export_kontrolem_controllers HAS_LIBRARY_TARGET)
 ament_export_dependencies(Eigen3 kontrolem_control kontrolem_model)
 
 if(BUILD_TESTING)
+  find_package(kontrolem_locomotion REQUIRED)  # concrete gaits used by the walk tests
   add_executable(test_lqr_cartpole test/test_lqr_cartpole.cpp)
   target_link_libraries(test_lqr_cartpole kontrolem_controllers)
   target_compile_definitions(test_lqr_cartpole PRIVATE
@@ -108,10 +110,24 @@ if(BUILD_TESTING)
 
   # M10 Step 2: WBC static crawl walk — all four feet cycle, walks forward, statically stable.
   add_executable(test_wbc_crawl test/test_wbc_crawl.cpp)
-  target_link_libraries(test_wbc_crawl kontrolem_controllers)
+  target_link_libraries(test_wbc_crawl kontrolem_controllers kontrolem_locomotion::kontrolem_locomotion)
   target_compile_definitions(test_wbc_crawl PRIVATE
     FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
   add_test(NAME wbc_crawl COMMAND test_wbc_crawl)
+
+  # M14 Step 2: WBC dynamic diagonal trot — feasibility on TWO diagonal stance feet, upright.
+  add_executable(test_wbc_trot test/test_wbc_trot.cpp)
+  target_link_libraries(test_wbc_trot kontrolem_controllers kontrolem_locomotion::kontrolem_locomotion)
+  target_compile_definitions(test_wbc_trot PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME wbc_trot COMMAND test_wbc_trot)
+
+  # M13 Step 3: kinematic (model-free) trot — TrotGait timing + per-leg IK + joint PD.
+  add_executable(test_kinematic_gait test/test_kinematic_gait.cpp)
+  target_link_libraries(test_kinematic_gait kontrolem_controllers kontrolem_locomotion::kontrolem_locomotion)
+  target_compile_definitions(test_kinematic_gait PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME kinematic_gait COMMAND test_kinematic_gait)
 
   # Heterogeneous bumpless-transfer spike (Part D D1/D4): switch LQG <-> MPC at
   # runtime and measure the command discontinuity; naive (stale observer) vs

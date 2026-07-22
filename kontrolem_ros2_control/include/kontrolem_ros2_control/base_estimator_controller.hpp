@@ -11,6 +11,7 @@
 #ifndef KONTROLEM_ROS2_CONTROL__BASE_ESTIMATOR_CONTROLLER_HPP_
 #define KONTROLEM_ROS2_CONTROL__BASE_ESTIMATOR_CONTROLLER_HPP_
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <string>
@@ -18,6 +19,8 @@
 
 #include "controller_interface/controller_interface.hpp"
 #include "kontrolem_estimation/base_estimator.hpp"
+#include "kontrolem_estimation/invariant_estimator.hpp"
+#include "kontrolem_estimation/state_estimator.hpp"
 #include "kontrolem_model/robot_model.hpp"
 #include "kontrolem_ros2_control/contact_sensor.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -25,6 +28,7 @@
 #include "realtime_tools/realtime_buffer.h"
 #include "realtime_tools/realtime_publisher.h"
 #include "sensor_msgs/msg/imu.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 
 namespace kontrolem_ros2_control
 {
@@ -43,7 +47,9 @@ public:
 
 private:
   std::optional<kontrolem_model::RobotModel> model_;
-  std::optional<kontrolem_estimation::BaseEstimator> estimator_;
+  // Held behind the interface so `estimator_type` selects the M8 complementary filter or
+  // the M11 Right-Invariant EKF without changing the update() loop below.
+  std::unique_ptr<kontrolem_estimation::IStateEstimator> estimator_;
   std::optional<ContactSensor> contact_sensor_;
 
   std::vector<std::string> joint_names_;     // actuated joints (encoder order)
@@ -59,6 +65,15 @@ private:
 
   std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odom_pub_;
   std::unique_ptr<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>> rt_odom_;
+
+  // Planned contact from the gait (M12): while walking, trust the PLAN over the flickering
+  // sensed contact. A per-tick watchdog (planned_fresh_) falls back to sensed if the stream
+  // stops (e.g. not walking), so standing/postures are unaffected.
+  bool use_planned_contact_ = false;
+  std::shared_ptr<rclcpp::Subscription<std_msgs::msg::Float64MultiArray>> planned_sub_;
+  realtime_tools::RealtimeBuffer<std::vector<uint8_t>> planned_buffer_;
+  std::atomic<int> planned_fresh_{0};   // >0 = a recent planned msg; decremented each tick
+  std::vector<uint8_t> landed_;         // per foot: sensor has confirmed contact this stance phase
 
   // Preallocated per-tick buffers.
   Eigen::VectorXd q_joints_, v_joints_;

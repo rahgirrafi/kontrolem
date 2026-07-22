@@ -14,7 +14,9 @@ find_package(kontrolem_model REQUIRED)
 
 # ROS-free estimator core. Pinocchio stays hidden inside kontrolem_model (pImpl), so
 # this library and its users only ever see Eigen.
-add_library(kontrolem_estimation SHARED src/base_estimator.cpp)
+add_library(kontrolem_estimation SHARED
+  src/base_estimator.cpp
+  src/invariant_estimator.cpp)
 target_include_directories(kontrolem_estimation PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
@@ -45,6 +47,16 @@ if(BUILD_TESTING)
   target_compile_definitions(test_base_estimator PRIVATE
     FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_quadruped.urdf")
   add_test(NAME base_estimator COMMAND test_base_estimator)
+
+  # Offline gate for the Right-Invariant EKF (M11): the M8 parity gates (static hold,
+  # velocity recovery, predict-integration, tilt recovery) PLUS the milestone proof — a
+  # simulated crawl walk with IMU noise + leg-odometry drift + injected contact-sensing
+  # flicker, where the InEKF must track the true base tighter than the complementary filter.
+  add_executable(test_invariant_estimator test/test_invariant_estimator.cpp)
+  target_link_libraries(test_invariant_estimator kontrolem_estimation)
+  target_compile_definitions(test_invariant_estimator PRIVATE
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/robots/floating_quadruped.urdf")
+  add_test(NAME invariant_estimator COMMAND test_invariant_estimator)
 endif()
 
 ament_package()

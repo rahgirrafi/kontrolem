@@ -21,9 +21,15 @@ CallbackReturn BaseEstimatorController::on_init()
     auto_declare<std::vector<std::string>>("contact_frames", {});
     auto_declare<std::string>("imu_topic", "/imu/data");
     auto_declare<std::string>("odom_topic", "/base_odom");
+    // M12: use the gait's PLANNED contact schedule instead of the sensed (flickering) one.
+    auto_declare<bool>("use_planned_contact", false);
+    auto_declare<std::string>("planned_contact_topic", "/planned_contact");
     auto_declare<std::string>("odom_frame", "world");
     auto_declare<std::string>("base_frame", "base");
     auto_declare<double>("base_height", 0.0);
+    // Which estimator: "complementary" (M8 contact-aided filter, default) or "inekf"
+    // (M11 Right-Invariant EKF — covariance-weighted, robust to contact-sensing flicker).
+    auto_declare<std::string>("estimator_type", "complementary");
     // Filter gains (see kontrolem_estimation::BaseEstimatorConfig).
     auto_declare<double>("gravity", 9.81);
     auto_declare<double>("k_grav", 0.02);
@@ -33,6 +39,14 @@ CallbackReturn BaseEstimatorController::on_init()
     auto_declare<double>("gyro_gate", 0.5);
     auto_declare<double>("innov_max", 0.15);
     auto_declare<bool>("flat_ground", false);
+    // InEKF noise densities (see kontrolem_estimation::InvariantEstimatorConfig).
+    auto_declare<double>("inekf.sigma_gyro", 0.01);
+    auto_declare<double>("inekf.sigma_accel", 0.1);
+    auto_declare<double>("inekf.sigma_contact", 1e-3);
+    auto_declare<double>("inekf.sigma_contact_swing", 1e3);
+    auto_declare<double>("inekf.sigma_fk", 0.02);
+    auto_declare<double>("inekf.sigma_grav", 0.2);
+    auto_declare<double>("inekf.fk_gate", 0.06);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "on_init failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -67,19 +81,42 @@ CallbackReturn BaseEstimatorController::on_configure(const rclcpp_lifecycle::Sta
     return CallbackReturn::ERROR;
   }
 
-  kontrolem_estimation::BaseEstimatorConfig cfg;
-  cfg.contact_frames = feet;
-  cfg.actuated_joints = joint_names_;
-  cfg.gravity = node.get_parameter("gravity").as_double();
-  cfg.k_grav = node.get_parameter("k_grav").as_double();
-  cfg.k_vel = node.get_parameter("k_vel").as_double();
-  cfg.k_pos = node.get_parameter("k_pos").as_double();
-  cfg.accel_gate = node.get_parameter("accel_gate").as_double();
-  cfg.gyro_gate = node.get_parameter("gyro_gate").as_double();
-  cfg.innov_max = node.get_parameter("innov_max").as_double();
-  cfg.flat_ground = node.get_parameter("flat_ground").as_bool();
+  const auto est_type = node.get_parameter("estimator_type").as_string();
+  const double gravity = node.get_parameter("gravity").as_double();
+  const double accel_gate = node.get_parameter("accel_gate").as_double();
+  const double gyro_gate = node.get_parameter("gyro_gate").as_double();
+  const double innov_max = node.get_parameter("innov_max").as_double();
   try {
-    estimator_.emplace(*model_, cfg);
+    if (est_type == "inekf") {
+      kontrolem_estimation::InvariantEstimatorConfig cfg;
+      cfg.contact_frames = feet;
+      cfg.actuated_joints = joint_names_;
+      cfg.gravity = gravity;
+      cfg.accel_gate = accel_gate;
+      cfg.gyro_gate = gyro_gate;
+      cfg.innov_max = innov_max;
+      cfg.sigma_gyro = node.get_parameter("inekf.sigma_gyro").as_double();
+      cfg.sigma_accel = node.get_parameter("inekf.sigma_accel").as_double();
+      cfg.sigma_contact = node.get_parameter("inekf.sigma_contact").as_double();
+      cfg.sigma_contact_swing = node.get_parameter("inekf.sigma_contact_swing").as_double();
+      cfg.sigma_fk = node.get_parameter("inekf.sigma_fk").as_double();
+      cfg.sigma_grav = node.get_parameter("inekf.sigma_grav").as_double();
+      cfg.fk_gate = node.get_parameter("inekf.fk_gate").as_double();
+      estimator_ = std::make_unique<kontrolem_estimation::InvariantEstimator>(*model_, cfg);
+    } else {
+      kontrolem_estimation::BaseEstimatorConfig cfg;
+      cfg.contact_frames = feet;
+      cfg.actuated_joints = joint_names_;
+      cfg.gravity = gravity;
+      cfg.k_grav = node.get_parameter("k_grav").as_double();
+      cfg.k_vel = node.get_parameter("k_vel").as_double();
+      cfg.k_pos = node.get_parameter("k_pos").as_double();
+      cfg.accel_gate = accel_gate;
+      cfg.gyro_gate = gyro_gate;
+      cfg.innov_max = innov_max;
+      cfg.flat_ground = node.get_parameter("flat_ground").as_bool();
+      estimator_ = std::make_unique<kontrolem_estimation::BaseEstimator>(*model_, cfg);
+    }
   } catch (const std::exception & e) {
     RCLCPP_ERROR(node.get_logger(), "failed to build estimator (check joint/foot names): %s",
                  e.what());
@@ -98,13 +135,30 @@ CallbackReturn BaseEstimatorController::on_configure(const rclcpp_lifecycle::Sta
   rt_odom_ =
     std::make_unique<realtime_tools::RealtimePublisher<nav_msgs::msg::Odometry>>(odom_pub_);
 
+  // M12: optionally subscribe to the gait's planned contact schedule (per-foot 0/1, in
+  // contact_frames order). When fresh, the estimator trusts it over the sensed contact.
+  use_planned_contact_ = node.get_parameter("use_planned_contact").as_bool();
+  if (use_planned_contact_) {
+    const std::size_t nfeet = feet.size();
+    planned_sub_ = node.create_subscription<std_msgs::msg::Float64MultiArray>(
+      node.get_parameter("planned_contact_topic").as_string(), rclcpp::SystemDefaultsQoS(),
+      [this, nfeet](const std_msgs::msg::Float64MultiArray::SharedPtr msg) {
+        if (msg->data.size() != nfeet) return;   // ignore mismatched-arity messages
+        std::vector<uint8_t> s(nfeet);
+        for (std::size_t i = 0; i < nfeet; ++i) s[i] = msg->data[i] > 0.5 ? 1 : 0;
+        planned_buffer_.writeFromNonRT(s);
+        planned_fresh_.store(50);   // ~0.1 s of freshness at 500 Hz before falling back
+      });
+  }
+
   const int nj = static_cast<int>(joint_names_.size());
   q_joints_.resize(nj);
   v_joints_.resize(nj);
   contact_raw_.assign(feet.size(), 0.0);
   stance_.assign(feet.size(), 0);
-  RCLCPP_INFO(node.get_logger(), "base estimator configured: %d joints, %zu feet, base_height=%.4f",
-              nj, feet.size(), base_height_);
+  RCLCPP_INFO(node.get_logger(),
+              "base estimator configured: type=%s, %d joints, %zu feet, base_height=%.4f",
+              est_type.c_str(), nj, feet.size(), base_height_);
   return CallbackReturn::SUCCESS;
 }
 
@@ -192,6 +246,32 @@ controller_interface::return_type BaseEstimatorController::update(
     const Eigen::Vector3d accel(
       imu->linear_acceleration.x, imu->linear_acceleration.y, imu->linear_acceleration.z);
     estimator_->predict(gyro, accel, period.seconds());
+  }
+
+  // M12: while a fresh planned-contact schedule is arriving (the gait is walking), a foot
+  // counts as stance only when the PLAN and the SENSOR AGREE it is down (logical AND). The
+  // plan vetoes a mis-sensed swing foot (plan says swing → never used, the M10 poison); the
+  // sensor vetoes a foot the plan expects down but that has not actually landed yet (touchdown
+  // timing). Either source alone is worse: the plan blindly used a still-airborne foot (est
+  // blew up), the sensor alone flickers. Watchdog decays to 0 → falls back to sensed contact
+  // when the stream stops, so standing/postures are unaffected.
+  int fresh = planned_fresh_.load();
+  if (use_planned_contact_ && fresh > 0) {
+    const auto * planned = planned_buffer_.readFromRT();
+    if (planned && planned->size() == stance_.size()) {
+      if (landed_.size() != stance_.size()) landed_.assign(stance_.size(), 0);
+      for (std::size_t i = 0; i < stance_.size(); ++i) {
+        if (!(*planned)[i]) {
+          landed_[i] = 0;                 // plan says swing → reset; foot is off the ground
+        } else if (stance_[i]) {
+          landed_[i] = 1;                 // plan says stance AND sensor confirms → latched
+        }
+        // A foot is stance iff the plan wants it down AND the sensor has confirmed it landed
+        // this phase (held through subsequent sensor flicker-drops until the plan lifts it).
+        stance_[i] = ((*planned)[i] && landed_[i]) ? 1 : 0;
+      }
+    }
+    planned_fresh_.store(fresh - 1);
   }
   estimator_->correct(q_joints_, v_joints_, stance_);
 

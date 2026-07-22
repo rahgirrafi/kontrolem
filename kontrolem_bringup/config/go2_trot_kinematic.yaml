@@ -1,0 +1,69 @@
+# M13 — Example A: the Go2 walks with the MODEL-FREE kinematic trot controller.
+# SAME robot, SAME Gazebo world as the WBC demos, but control_law: kinematic_gait — no dynamics,
+# no QP, no estimator. Each tick the KinematicGaitController samples a diagonal TrotGait, solves a
+# per-leg IK for the joint angles that place each foot on its world target, and emits a joint PD
+# torque. Fully open-loop in the base (the IK base is the scheduled nominal pose), so it runs with
+# estimator:=false and base_source:=ecm. This is the CHAMP lineage as a Controller plugin — the
+# simplest of the "Go2 walks four ways" showcase (cf. go2_walk_controllers.yaml = the WBC crawl).
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: kinematic_gait
+    base_type: floating
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+    safe_action: zero
+    publish_diagnostics: true
+
+    actuated_joints:
+      - FL_hip_joint
+      - FL_thigh_joint
+      - FL_calf_joint
+      - FR_hip_joint
+      - FR_thigh_joint
+      - FR_calf_joint
+      - RL_hip_joint
+      - RL_thigh_joint
+      - RL_calf_joint
+      - RR_hip_joint
+      - RR_thigh_joint
+      - RR_calf_joint
+    contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
+    base_gpio: floating_base
+    contact_gpio: contact
+
+    # Nominal stance the gait is built around (shared param names with the WBC configs).
+    wbc.base_height: 0.2868
+    wbc.nominal_posture: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
+
+    # Dynamic diagonal TROT. swing_pair groups the feet (contact-frame order FL,FR,RL,RR) into the
+    # two diagonals {FL,RR}=0 and {FR,RL}=1; each swings once per stride, 180° out of phase. Base is
+    # held at nominal (NO weight-shift) and advanced forward at step_len/period. start_delay holds
+    # nominal until well after the startup weld is released.
+    reference_type: trot
+    gait.swing_pair: [0, 1, 1, 0]
+    gait.period: 0.8
+    gait.duty: 0.5
+    gait.step_len: 0.06
+    gait.step_h: 0.06
+    gait.start_delay: 6.0
+
+    # Model-free joint PD (→ effort). No gravity compensation, so kp must be stiff enough to hold
+    # the stance legs against gravity (the honest cost of the model-free paradigm). IK is per-leg
+    # Gauss-Newton, capped at ik_max_iter (hard-RT bound), step-clamped for singularity safety.
+    kin.kp: 150.0
+    kin.kd: 4.0
+    kin.tau_max: 23.7
+    kin.ik_max_iter: 20
+    kin.ik_tol: 1.0e-6
+    kin.ik_step_clamp: 0.5

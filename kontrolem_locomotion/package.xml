@@ -1,13 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>kontrolem_controllers</name>
+  <name>kontrolem_locomotion</name>
   <version>0.0.1</version>
   <description>
-    Kontrol'Em v2 Layer-3 controller implementations. Interface-test slice:
-    LqrController (precomputed static-gain state feedback, CARE-synthesized) and
-    (next) a QP task-space controller — two structurally different controllers
-    behind the one kontrolem_control contract. ROS-independent core.
+    Kontrol'Em v2 concrete gait patterns: morphology-specific GaitSource
+    implementations (quadruped CrawlGait / TrotGait now; humanoid/biped gaits
+    later) that emit the GaitPlan a whole-body or kinematic controller executes to
+    walk. Header-only, ROS-independent. The locomotion analogue of
+    kontrolem_controllers (impl) against the kontrolem_control (contract)
+    GaitSource seam — so robot-specific gait patterns never accrete in the core.
   </description>
   <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
   <license>MIT</license>
@@ -17,11 +19,6 @@
 
   <depend>eigen</depend>
   <depend>kontrolem_control</depend>
-  <depend>kontrolem_model</depend>
-  <depend>osqp</depend>
-
-  <test_depend>ament_cmake_test</test_depend>
-  <test_depend>kontrolem_locomotion</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

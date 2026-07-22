@@ -30,6 +30,7 @@
 #include <Eigen/Dense>
 
 #include "kontrolem_control/types.hpp"
+#include "kontrolem_estimation/state_estimator.hpp"  // BaseState, IStateEstimator
 #include "kontrolem_model/robot_model.hpp"
 
 namespace kontrolem_estimation
@@ -37,16 +38,6 @@ namespace kontrolem_estimation
 
 using kontrolem_control::Status;
 using kontrolem_model::RobotModel;
-
-/// InEKF-ready floating-base state, an SE_2(3) element. R: world<-base orientation.
-/// v: world-frame base linear velocity. p: world-frame base position. A right-invariant
-/// EKF upgrades in place behind this same shape (that is why v/p are world-frame).
-struct BaseState
-{
-  Eigen::Matrix3d R = Eigen::Matrix3d::Identity();
-  Eigen::Vector3d v = Eigen::Vector3d::Zero();
-  Eigen::Vector3d p = Eigen::Vector3d::Zero();
-};
 
 /// Filter configuration. Gains are complementary blend factors in [0, 1] (per correct)
 /// except where noted; the defaults are sized for quasi-static standing and are the
@@ -71,7 +62,7 @@ struct BaseEstimatorConfig
                              ///< The general (terrain) case is the deferred InEKF's job.
 };
 
-class BaseEstimator
+class BaseEstimator final : public IStateEstimator
 {
 public:
   /// `model` must be a FLOATING-base RobotModel and outlive this estimator (a const
@@ -83,29 +74,29 @@ public:
   /// v is set to zero. Call on activation, exactly as LqgController seeds its observer.
   void seed(
     const Eigen::Vector3d & p, const Eigen::Matrix3d & R,
-    const Eigen::VectorXd & q_joints, const std::vector<uint8_t> & stance);
+    const Eigen::VectorXd & q_joints, const std::vector<uint8_t> & stance) override;
 
   /// IMU dead-reckoning over dt. `gyro` and `accel` are body-frame; `accel` is the
   /// measured specific force (a static, level base reads ~[0, 0, +gravity]).
-  void predict(const Eigen::Vector3d & gyro, const Eigen::Vector3d & accel, double dt);
+  void predict(const Eigen::Vector3d & gyro, const Eigen::Vector3d & accel, double dt) override;
 
   /// Measurement update from the joint encoders (`q_joints`, `v_joints`, in
   /// cfg.actuated_joints order) and the per-foot `stance` mask (1 = in contact, in
   /// cfg.contact_frames order). Bounds the predict() drift.
   void correct(
     const Eigen::VectorXd & q_joints, const Eigen::VectorXd & v_joints,
-    const std::vector<uint8_t> & stance);
+    const std::vector<uint8_t> & stance) override;
 
-  const BaseState & state() const { return x_; }
-  Eigen::Quaterniond orientation() const { return Eigen::Quaterniond(x_.R); }
-  const Eigen::Vector3d & position() const { return x_.p; }
-  const Eigen::Vector3d & velocity_world() const { return x_.v; }
+  const BaseState & state() const override { return x_; }
+  Eigen::Quaterniond orientation() const override { return Eigen::Quaterniond(x_.R); }
+  const Eigen::Vector3d & position() const override { return x_.p; }
+  const Eigen::Vector3d & velocity_world() const override { return x_.v; }
   /// Body-frame linear velocity R^T v (Pinocchio free-flyer / REP-145 convention —
   /// what nav_msgs/Odometry.twist carries for OdometryBaseBridge).
-  Eigen::Vector3d velocity_body() const { return x_.R.transpose() * x_.v; }
+  Eigen::Vector3d velocity_body() const override { return x_.R.transpose() * x_.v; }
   /// Body-frame angular velocity (the last gyro reading).
-  const Eigen::Vector3d & angular_body() const { return omega_; }
-  const Status & status() const { return status_; }
+  const Eigen::Vector3d & angular_body() const override { return omega_; }
+  const Status & status() const override { return status_; }
 
 private:
   /// Fill q_full_ (nq) from the current base state x_ and the measured joint positions.

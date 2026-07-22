@@ -40,6 +40,8 @@ def launch_setup(context, *args, **kwargs):
     base_height = "0.2868"  # offline-proven (feet grounded); matches world anchor + yaml
     # base_source is baked into the generated URDF text, so resolve it now (perform).
     base_source = LaunchConfiguration("base_source").perform(context)
+    # estimator_type selects the M8 complementary filter (default) or the M11 InEKF.
+    estimator_type = LaunchConfiguration("estimator_type").perform(context)
 
     # Clean URDF the controller parses with Pinocchio (floating base); it ignores
     # the ros2_control/gazebo tags. Same body as the gz URDF.
@@ -53,7 +55,9 @@ def launch_setup(context, *args, **kwargs):
         yaml.safe_dump(
             {"kontrolem_controller": {"ros__parameters": {"robot_description": clean_urdf}},
              # M8: the estimator parses the SAME clean floating URDF (FK/Jacobian).
-             "base_estimator": {"ros__parameters": {"robot_description": clean_urdf}}},
+             # M11: estimator_type picks the complementary filter or the InEKF.
+             "base_estimator": {"ros__parameters": {
+                 "robot_description": clean_urdf, "estimator_type": estimator_type}}},
             f, default_flow_style=False)
 
     with open(gz_urdf_template) as f:
@@ -133,6 +137,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("gui", default_value="false"),
         DeclareLaunchArgument("estimator", default_value="true"),
+        DeclareLaunchArgument("estimator_type", default_value="complementary"),
         DeclareLaunchArgument("base_source", default_value="ecm"),
         DeclareLaunchArgument("controllers", default_value="go2_stand_controllers.yaml"),
         OpaqueFunction(function=launch_setup),

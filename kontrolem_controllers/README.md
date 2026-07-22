@@ -25,6 +25,13 @@ Prove that one plugin contract (`compute(state, problem, dt) → command`) fits
   (`q = G·x0` [− `M_ref·Xref` when tracking]) and warm-solves via the same
   `QpSolver`/OSQP seam, applying the first input. Hard torque limits live inside
   the QP. Accepts Regulation and Tracking; malloc-free.
+- **`KinematicGaitController`** — a *model-free* walking controller (M13). No
+  dynamics, no QP, no estimator: each tick it samples a gait plan, solves a
+  per-leg inverse-kinematics for the joint angles that place each foot on its
+  world target, and emits a joint PD torque (open-loop in the base). Accepts
+  `Locomotion`; consumes a `GaitSource` from `kontrolem_locomotion`. The simplest
+  entry in the "Go2 walks four ways" showcase — proof the contract also fits a
+  purely kinematic paradigm.
 
 Also provides `care.hpp`, a small Eigen-only CARE solver — reused for both the
 control Riccati and (transposed) the filter Riccati.

@@ -21,6 +21,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(kontrolem_control REQUIRED)
 find_package(kontrolem_model REQUIRED)
 find_package(kontrolem_controllers REQUIRED)
+find_package(kontrolem_locomotion REQUIRED)
 find_package(kontrolem_estimation REQUIRED)
 
 add_library(kontrolem_ros2_control SHARED
@@ -36,6 +37,7 @@ target_link_libraries(kontrolem_ros2_control PUBLIC
   kontrolem_control::kontrolem_control
   kontrolem_model::kontrolem_model
   kontrolem_controllers::kontrolem_controllers
+  kontrolem_locomotion::kontrolem_locomotion
   kontrolem_estimation::kontrolem_estimation)
 ament_target_dependencies(kontrolem_ros2_control PUBLIC
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
@@ -55,6 +57,7 @@ ament_export_targets(export_kontrolem_ros2_control HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   controller_interface hardware_interface pluginlib rclcpp rclcpp_lifecycle
   realtime_tools kontrolem_msgs sensor_msgs nav_msgs geometry_msgs
-  kontrolem_control kontrolem_model kontrolem_controllers kontrolem_estimation)
+  kontrolem_control kontrolem_model kontrolem_controllers kontrolem_locomotion
+  kontrolem_estimation)
 
 ament_package()

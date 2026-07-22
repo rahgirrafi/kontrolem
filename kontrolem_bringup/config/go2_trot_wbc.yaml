@@ -1,8 +1,12 @@
-# M10 — static crawl WALK demo for the Unitree Go2. SAME KontrolemController + WBC as the
-# standing/posture demos, but reference_type: gait drives a CrawlGait: one foot swings at a
-# time (lift, step forward, place) while the base shifts to keep the CoM over the support
-# triangle — so the Go2 WALKS FORWARD, statically stable throughout. The estimator rides
-# along, so the walk also runs on the estimate (base_source:=estimate).
+# M14 — Example B: the Go2 trots with the WHOLE-BODY QP (control_law: wbc). SAME robot, SAME Gazebo
+# world, SAME diagonal TrotGait as the model-free kinematic trot (go2_trot_kinematic.yaml) — but a
+# structurally different controller: an inverse-dynamics QP with contact constraints, friction cones,
+# torque limits and full floating-base dynamics, closed-loop on the base (ground truth, then the
+# InEKF estimate). A user swaps ONE line — kinematic_gait <-> wbc — and watches the same robot walk
+# the same gait two different ways. Behaviourally this is the crawl demo with CrawlGait->TrotGait
+# (the static weight-shift deleted): the two grounded diagonal feet are the support, the two flight
+# feet track their swing arc, the base task holds nominal and glides forward. Offline-proven feasible
+# on two diagonal feet (test_wbc_trot). The estimator rides along, so it also runs on the estimate.
 controller_manager:
   ros__parameters:
     update_rate: 500
@@ -25,11 +29,7 @@ kontrolem_controller:
     state_velocity_interface: velocity
     safe_action: zero
     publish_diagnostics: true
-    # M12: broadcast the gait's planned contact for the estimator (available; OFF by default —
-    # it did not improve walk-on-estimate because the dominant failure is the GAIT tipping at
-    # startup, not the estimator; see DEVELOPMENT.md M12). Set true + the estimator's
-    # use_planned_contact to experiment once the gait startup is made robust.
-    publish_planned_contact: false
+    publish_planned_contact: true
     planned_contact_topic: /planned_contact
 
     actuated_joints:
@@ -52,21 +52,23 @@ kontrolem_controller:
     wbc.base_height: 0.2868
     wbc.nominal_posture: [0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8, 0.0, 0.9, -1.8]
 
-    # Static crawl walk. order = swing sequence of contact_frames indices (RL, FL, RR, FR).
-    # One foot swings at a time (duty of its quarter-cycle); the base tracks the support
-    # centroid (held over the current triangle during a swing, pre-shifted during the
-    # all-stance margin). Offline-proven params (test_wbc_crawl); tune in-sim if needed.
-    reference_type: gait
-    gait.order: [2, 0, 3, 1]
-    gait.period: 14.0
+    # Dynamic diagonal TROT (the M13 TrotGait; SAME gait as go2_trot_kinematic.yaml). swing_pair
+    # groups the feet (contact-frame order FL,FR,RL,RR) into the two diagonals {FL,RR}=0 and
+    # {FR,RL}=1; each swings once per stride, 180 deg out of phase. duty < 1 leaves an all-four-
+    # stance bracket around each swing, so there is never a flight phase (>=2 feet down) — the
+    # quasi-static trot the offline gate validated (test_wbc_trot). The base is held at nominal (NO
+    # weight-shift) and glides forward at step_len/period, with the matching velocity feedforward.
+    reference_type: trot
+    gait.swing_pair: [0, 1, 1, 0]
+    gait.period: 1.0
     gait.duty: 0.5
-    gait.step_len: 0.04
-    gait.step_h: 0.045
-    gait.base_gain: 1.0
+    gait.step_len: 0.06
+    gait.step_h: 0.05
     gait.start_delay: 6.0   # hold nominal until well after the startup weld is released
 
-    # QP task gains. kp_post = 0: posture is a pure damping regularizer so the swing leg is
-    # free to follow its arc (as M9). kp_swing/kd_swing track the swing foot to its target.
+    # QP task gains. kp_post = 0: posture is a pure damping regularizer so a swing leg is free to
+    # follow its arc; the swing task (kp_swing/kd_swing) tracks the flight feet, the base task
+    # (kp_base/kd_base, stiff) holds the trunk upright and glides it forward over the two diagonals.
     wbc.kp_base: 100.0
     wbc.kd_base: 20.0
     wbc.kp_post: 0.0
@@ -99,10 +101,7 @@ base_estimator:
     contact_frames: [FL_foot, FR_foot, RL_foot, RR_foot]
     imu_topic: /imu/data
     odom_topic: /base_odom
-    # M12: trust the gait's PLANNED contact over the flickering sensed contact. Implemented
-    # and available, but OFF by default — testing showed it does not improve reliability
-    # (the dominant walk failure is the gait tipping at startup, not the estimator).
-    use_planned_contact: false
+    use_planned_contact: true
     planned_contact_topic: /planned_contact
     odom_frame: world
     base_frame: base
@@ -114,10 +113,10 @@ base_estimator:
     accel_gate: 0.5
     gyro_gate: 0.5
     innov_max: 0.15
-    flat_ground: true   # WALK: pin re-anchored foot heights so leg-odometry z can't drift
-    # M11 InEKF tuning for the closed-loop WALK (used when estimator_type:=inekf):
+    flat_ground: true
+    # InEKF tuning for the closed-loop trot (used when estimator_type:=inekf):
     inekf.sigma_gyro: 0.005
-    inekf.sigma_accel: 0.5      # responsive velocity (the WBC is sensitive to it)
+    inekf.sigma_accel: 0.5
     inekf.sigma_fk: 0.02
     inekf.sigma_contact: 0.001
-    inekf.sigma_grav: 1000000.0 # gravity aid OFF in-loop (M8: it destabilizes the closed loop)
+    inekf.sigma_grav: 1000000.0

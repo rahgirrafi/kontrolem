@@ -72,7 +72,21 @@ All laws implement the `kontrolem_control::Controller` contract: `capabilities()
 | `status().ok` | QP solved. |
 | `status().margin` | Smallest friction-pyramid margin `μλ_z − max(|λ_x|,|λ_y|)` across feet (newtons). |
 | Params | `wbc.*` (see [Controller parameters](controller-parameters.md)) |
-| Scope | Standing / push-recovery, **commanded postures** (squat/sway/tilt/yaw over planted feet; the `Tracking` dialect), and a **static crawl WALK** (feet leave/rejoin the ground; the `Locomotion` dialect carries a `GaitSource` — a swinging foot gets zero force + a swing-arc task, the base tracks the support centroid; `reference_type: gait`; see [How-to → Make the Go2 walk](../how-to/make-the-go2-walk.md)). Dynamic gaits/running/jumping are later milestones. |
+| Scope | Standing / push-recovery, **commanded postures** (squat/sway/tilt/yaw over planted feet; the `Tracking` dialect), and a **static crawl WALK** (feet leave/rejoin the ground; the `Locomotion` dialect carries a `GaitSource` — a swinging foot gets zero force + a swing-arc task, the base tracks the support centroid; `reference_type: gait`; see [How-to → Make the Go2 walk](../how-to/make-the-go2-walk.md)), and a **diagonal TROT** (`reference_type: trot` — the same `Locomotion` path with a `TrotGait`: two diagonal feet in stance, two in swing, the base held nominal and glided forward; a quasi-static trot, offline-gated on two-foot feasibility by `test_wbc_trot`; see [How-to → Make the Go2 trot (whole-body)](../how-to/make-the-go2-trot-whole-body.md)). Truly dynamic gaits with a flight phase (running/jumping) are later milestones. |
+
+## Kinematic gait — `kinematic_gait` (`KinematicGaitController`)
+
+| | |
+|---|---|
+| Method | **Model-free** walking. No dynamics, no QP, no estimator: sample a gait plan → per-leg Gauss-Newton inverse-kinematics (fixed-size 3×3 leg Jacobian) → joint PD torque `τ = kp(q* − q) − kd q̇`. The IK pins the base to the *scheduled* (nominal, forward-advancing) pose, so it is **open-loop in the base**. The CHAMP lineage as a `Controller` plugin. |
+| Accepts | Locomotion |
+| Required state | Joint position + velocity only (the base part of the state is unused). |
+| Heavy phase | none (`synthesize()` is a no-op). |
+| `compute()` | Sample the `GaitSource`, per-leg IK to the foot targets (warm-started, step-clamped, `ik_max_iter` bound), joint PD → `τ`, `tau_max`-clamped. Allocation-free. |
+| `status().ok` | Every foot reached its target within ~1 mm (IK converged). |
+| `status().margin` | `1e-3 −` worst foot-to-target distance (m). |
+| Params | `kin.*`, `gait.*` (see [Controller parameters](controller-parameters.md)) |
+| Scope | Point-foot legs with **3 joints per leg** (a standard quadruple like the Go2); a >3-DoF leg needs the documented least-squares IK extension. No force awareness and open-loop heading (it walks forward + upright but slowly veers) — the honest cost of the model-free paradigm. See [How-to → Make the Go2 trot](../how-to/make-the-go2-trot.md). |
 
 ---
 
@@ -85,3 +99,4 @@ All laws implement the `kontrolem_control::Controller` contract: `capabilities()
 | `mpc` | Regulation, Tracking | full | configure (condense) | yes (QP) |
 | `qp` | Regulation | full | none | yes (QP) |
 | `wbc` | Regulation, Tracking, Locomotion | floating base + contacts | none | yes (QP) |
+| `kinematic_gait` | Locomotion | joints only (base open-loop) | none | no (per-leg IK) |
