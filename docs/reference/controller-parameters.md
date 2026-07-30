@@ -14,7 +14,7 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 
 | Parameter | Type | Default | Meaning |
 |---|---|---|---|
-| `control_law` | string | `lqr` | Paradigm (single-controller mode): `lqr` \| `lqg` \| `mpc` \| `qp` \| `wbc`. Ignored if `control_laws` is set. |
+| `control_law` | string | `lqr` | Paradigm (single-controller mode): `lqr` \| `lqg` \| `lpv` \| `mpc` \| `qp` \| `wbc` \| `kinematic_gait`, **or any third-party law** registered as a `ControllerFactory` plugin. Ignored if `control_laws` is set. |
 | `control_laws` | string[] | `[]` | Multi-controller mode: laws the Supervisor hosts (first is initially active). Non-empty enables live switching over `~/switch_controller`. |
 | `switch_blend_ticks` | int | `20` | Command-blend length (ticks) at a **manual** switch; larger = gentler handoff. `1` = hard switch. Auto fail-forward always switches hard (never blends a failed law's command). |
 | `auto_fallback` | bool | `false` | Multi-controller mode: let the Supervisor fail over on its own. When the active law reports `status().ok == false` for `fallback_dwell` consecutive ticks, it hands off (hard) to the next law in `control_laws`. Manual switching still works. |
@@ -73,6 +73,23 @@ The runtime builds the gait from FK on the nominal stance (`wbc.base_height` + `
 | `lqg.w_diag` | double[] | identity | Process-noise covariance diagonal, length `2*nv`. |
 | `lqg.v_diag` | double[] | identity | Measurement-noise covariance diagonal, length `nq`. |
 | `lqg.innov_max` | double | `0.5` | Innovation gate: max filter surprise before failing safe. |
+
+## LPV / gain scheduling (`control_law: lpv`)
+
+The scheduling grid is given as **parallel arrays — one entry per axis**: `sched_joints[i]`,
+`sched_min[i]`, `sched_max[i]` and `sched_nodes[i]` together describe axis `i`. All four must
+agree in length (`sched_nodes` may be empty to take the default on every axis). A mismatch, an
+unknown joint name, a node count below 2, or an inverted envelope is rejected at
+`on_configure` — before the robot moves.
+
+| Parameter | Type | Default | Meaning |
+|---|---|---|---|
+| `lpv.q_diag` | double[] | identity | State-cost diagonal for **every** node design, length `2*nv`. |
+| `lpv.r_diag` | double[] | identity | Input-cost diagonal for every node design, per actuated joint. |
+| `lpv.sched_joints` | string[] | `[]` (required) | Joints whose configuration schedules the design — one per grid axis. |
+| `lpv.sched_min` | double[] | `[]` | Per-axis envelope lower bound. |
+| `lpv.sched_max` | double[] | `[]` | Per-axis envelope upper bound (must exceed `sched_min`). |
+| `lpv.sched_nodes` | int[] | `[]` → 9 per axis | Per-axis number of LQR designs, `>= 2`. Total designs = the product, so keep the grid small. |
 
 ## MPC (`control_law: mpc`)
 

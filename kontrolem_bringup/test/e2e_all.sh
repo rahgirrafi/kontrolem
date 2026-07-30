@@ -12,6 +12,7 @@ CASES=(
   "cart_pole_lqg.launch.py|pole_joint|0.05"          # LQG, output feedback
   "cart_double_pole.launch.py|pole1_joint|0.05"      # LQR, hard 3-DoF benchmark
   "arm2.launch.py|shoulder_joint|0.05"               # QP task-space, 2-DoF arm
+  "arm2_lpv.launch.py|shoulder_joint|0.05|9|14|-0.9" # LPV gain-scheduling, 2-DoF arm
   "quad_stand.launch.py|knee_FL|0.2|9|14|-1.4"       # QP-WBC, quadruped standing
 )
 

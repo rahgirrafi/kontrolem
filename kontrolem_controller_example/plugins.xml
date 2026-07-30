@@ -1,0 +1,10 @@
+<library path="kontrolem_controller_example">
+  <class type="kontrolem_controller_example::ExampleFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>
+      Example out-of-tree control law (gravity comp + joint PD). Demonstrates
+      that a third-party controller drops in via `control_law: example` with no
+      edits to the Kontrol'Em framework.
+    </description>
+  </class>
+</library>

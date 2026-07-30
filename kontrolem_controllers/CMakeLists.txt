@@ -21,7 +21,8 @@ add_library(kontrolem_controllers SHARED
   src/qp_solver.cpp
   src/qp_task_space_controller.cpp
   src/wbc_controller.cpp
-  src/kinematic_gait_controller.cpp)
+  src/kinematic_gait_controller.cpp
+  src/factories.cpp)   # M16: ControllerFactory wrappers (config-as-data)
 target_include_directories(kontrolem_controllers PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
@@ -181,6 +182,15 @@ if(BUILD_TESTING)
   target_compile_definitions(test_allocation PRIVATE
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME allocation_audit COMMAND test_allocation)
+
+  # M16: the config-path gate — factory(defaults) == direct-construct; overrides flow.
+  add_executable(test_controller_factories test/test_controller_factories.cpp)
+  target_link_libraries(test_controller_factories kontrolem_controllers)
+  target_compile_definitions(test_controller_factories PRIVATE
+    CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf"
+    ARM2_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/arm2.urdf"
+    FLOATING_QUAD_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/floating_quadruped.urdf")
+  add_test(NAME controller_factories COMMAND test_controller_factories)
 
   add_executable(test_malloc_audit test/test_malloc_audit.cpp)
   target_link_libraries(test_malloc_audit kontrolem_controllers)

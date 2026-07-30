@@ -34,6 +34,11 @@ if(BUILD_TESTING)
   target_compile_definitions(test_contract_compiles PRIVATE
     CART_POLE_URDF="${CMAKE_CURRENT_SOURCE_DIR}/../kontrolem_model/robots/cart_pole.urdf")
   add_test(NAME contract_compiles COMMAND test_contract_compiles)
+
+  # M16: the ROS-free config-as-data types (ParameterSpec / ParameterMap).
+  add_executable(test_params test/test_params.cpp)
+  target_link_libraries(test_params kontrolem_control)
+  add_test(NAME params COMMAND test_params)
 endif()
 
 ament_package()

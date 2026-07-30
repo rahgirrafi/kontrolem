@@ -1,0 +1,31 @@
+# M16 acceptance: the SAME KontrolemController runtime, the SAME 2-DoF arm, but
+# driven by an OUT-OF-TREE control law (kontrolem_controller_example) selected by
+# `control_law: example`. Nothing in kontrolem_ros2_control / kontrolem_controllers
+# was edited to make this work — the law is discovered by pluginlib and configured
+# from its own parameter schema (example.*).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: example        # <-- resolved via ControllerFactory::name(), not an if/else
+    actuated_joints: ["shoulder_joint", "elbow_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+
+    q_ref: [0.0, 0.0]           # both links horizontal — held by gravity comp + PD
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+
+    # The out-of-tree law's OWN parameters (declared from its parameter_spec()).
+    example.kp: 100.0
+    example.kd: 20.0
+    example.tau_max: 30.0

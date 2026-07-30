@@ -32,6 +32,21 @@ All laws implement the `kontrolem_control::Controller` contract: `capabilities()
 | `status().margin` | `innov_max −` innovation magnitude. |
 | Params | `lqg.q_diag`, `lqg.r_diag`, `lqg.w_diag`, `lqg.v_diag`, `lqg.innov_max` |
 
+## LPV / gain scheduling — `lpv` (`LpvController`)
+
+| | |
+|---|---|
+| Method | Point-wise design + interpolation (Shamma–Athans): an LQR is synthesized at every node of a regular grid over the scheduling variables, and `(K, u_eq)` is **multilinearly interpolated** on the measured state each tick. |
+| Accepts | Regulation, Tracking |
+| Required state | Full state. |
+| Heavy phase | `synthesize()` — one CARE solve **per grid node** (an `n₁ × n₂ × …` grid). |
+| `compute()` | Locate the state in the grid, interpolate `(K, u_eq)` over the `2^D` corners, then `u = u_eq(θ) − K(θ)(x − x_ref)` (allocation-free). |
+| `status().ok` | Scheduling variable **inside the designed envelope**. |
+| `status().margin` | Signed distance to the nearest envelope bound (negative = outside the grid). |
+| Params | `lpv.q_diag`, `lpv.r_diag`, `lpv.sched_joints`, `lpv.sched_min`, `lpv.sched_max`, `lpv.sched_nodes` |
+| Note | Each node is locally optimal and interpolation covers between them, but there is **no cross-envelope stability certificate** — that needs an LMI-LPV synthesis, a later upgrade behind the same runtime. Grid cost is `∏ nᵢ` CARE solves, so keep `D` small. |
+| Note | LPV is **one continuously-scheduled controller** (an L3 law), not the Supervisor's discrete switch between whole controllers (L4). See [Switch the control law](../how-to/switch-control-law.md) for the latter. |
+
 ## Linear MPC — `mpc` (`MpcController`)
 
 | | |

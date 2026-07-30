@@ -1,0 +1,50 @@
+# controller_manager config for the M17 gain-scheduling (LPV) demo on the 2-DoF arm.
+#
+# Why this robot: the arm's gravity load g(q) and inertia M(q) change strongly with
+# configuration, so a SINGLE LQR carries the wrong feedforward away from its design
+# pose and droops. The LPV law designs an LQR at every node of a grid over the two
+# joint angles and multilinearly interpolates (K, u_eq) on the measured state, so it
+# holds poses across the whole envelope.
+#
+# The robot_description string is injected at launch time as
+# `kontrolem_controller.robot_description` (see launch/_common.py).
+controller_manager:
+  ros__parameters:
+    update_rate: 200  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    kontrolem_controller:
+      type: kontrolem_ros2_control/KontrolemController
+
+kontrolem_controller:
+  ros__parameters:
+    control_law: lpv
+    actuated_joints: ["shoulder_joint", "elbow_joint"]
+    command_interface: effort
+    state_position_interface: position
+    state_velocity_interface: velocity
+
+    # The arm starts at (+1.0, -1.0) and is regulated ACROSS the envelope to
+    # (-0.9, +0.9) — a ~1.9 rad excursion on both joints, so the operating point
+    # (and hence the correct gain + gravity feedforward) changes a lot en route.
+    q_ref: [-0.9, 0.9]
+    v_ref: [0.0, 0.0]
+    safe_action: zero
+
+    # LPV design. The scheduling grid is four parallel arrays, one entry per axis:
+    # which joint schedules it, the envelope it covers, and how many LQR designs to
+    # place along it. 9 x 9 = 81 designs, 0.4 rad node spacing. Outside this envelope
+    # status() reports not-ok (negative margin) — the supervisor's trust signal.
+    lpv.sched_joints: ["shoulder_joint", "elbow_joint"]
+    lpv.sched_min: [-1.6, -1.6]
+    lpv.sched_max: [1.6, 1.6]
+    lpv.sched_nodes: [9, 9]
+
+    # Per-node LQR weights (shared by every design in the grid): penalise position
+    # error 10x velocity, cheap torque so it moves briskly.
+    lpv.q_diag: [10.0, 10.0, 1.0, 1.0]
+    lpv.r_diag: [0.1, 0.1]
+
+    publish_diagnostics: true

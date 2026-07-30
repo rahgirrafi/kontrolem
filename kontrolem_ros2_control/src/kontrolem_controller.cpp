@@ -2,14 +2,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <set>
 #include <stdexcept>
 
-#include "kontrolem_controllers/lqr_controller.hpp"
-#include "kontrolem_controllers/lqg_controller.hpp"
-#include "kontrolem_controllers/mpc_controller.hpp"
-#include "kontrolem_controllers/qp_task_space_controller.hpp"
-#include "kontrolem_controllers/wbc_controller.hpp"
-#include "kontrolem_controllers/kinematic_gait_controller.hpp"
 #include "kontrolem_locomotion/crawl_gait.hpp"
 #include "kontrolem_locomotion/trot_gait.hpp"
 #include "pluginlib/class_list_macros.hpp"
@@ -17,106 +13,114 @@
 namespace kontrolem_ros2_control
 {
 namespace kc = kontrolem_control;
-namespace kctl = kontrolem_controllers;
 using controller_interface::CallbackReturn;
 using controller_interface::InterfaceConfiguration;
 using controller_interface::interface_configuration_type;
 
-namespace
+// M16 controller registry. build_law() replaces the old make_law() if/else: it
+// discovers ControllerFactory plugins by name, declares the selected law's
+// parameters generically from its ParameterSpec, validates them, and constructs
+// the law. Adding a controller no longer edits this file — it ships its own
+// ControllerFactory plugin and is selected by control_law: <its name>.
+
+// Declare one parameter from its ParamDesc (dispatching on the variant type that
+// its default pins) and return the read value.
+kc::ParamValue KontrolemController::declare_law_param(const kc::ParamDesc & desc)
 {
-Eigen::MatrixXd diag_or_identity(const std::vector<double> & d, int n)
-{
-  Eigen::MatrixXd M = Eigen::MatrixXd::Identity(n, n);
-  if (static_cast<int>(d.size()) == n) {
-    for (int i = 0; i < n; ++i) {
-      M(i, i) = d[static_cast<std::size_t>(i)];
-    }
+  const auto & def = desc.default_value;
+  if (std::holds_alternative<double>(def)) {
+    return kc::ParamValue{auto_declare<double>(desc.name, std::get<double>(def))};
   }
-  return M;
+  if (std::holds_alternative<std::int64_t>(def)) {
+    return kc::ParamValue{auto_declare<std::int64_t>(desc.name, std::get<std::int64_t>(def))};
+  }
+  if (std::holds_alternative<bool>(def)) {
+    return kc::ParamValue{auto_declare<bool>(desc.name, std::get<bool>(def))};
+  }
+  if (std::holds_alternative<std::string>(def)) {
+    return kc::ParamValue{auto_declare<std::string>(desc.name, std::get<std::string>(def))};
+  }
+  if (std::holds_alternative<std::vector<double>>(def)) {
+    return kc::ParamValue{
+      auto_declare<std::vector<double>>(desc.name, std::get<std::vector<double>>(def))};
+  }
+  if (std::holds_alternative<std::vector<std::int64_t>>(def)) {
+    return kc::ParamValue{
+      auto_declare<std::vector<std::int64_t>>(desc.name, std::get<std::vector<std::int64_t>>(def))};
+  }
+  return kc::ParamValue{
+    auto_declare<std::vector<std::string>>(desc.name, std::get<std::vector<std::string>>(def))};
 }
 
-// Build the concrete control law selected by parameter. This is the M0 factory;
-// it will grow into a pluginlib-based registry as more laws land.
-std::unique_ptr<kc::Controller> make_law(
-  const rclcpp_lifecycle::LifecycleNode & node, const std::string & law,
-  const std::vector<std::string> & actuated, const kontrolem_model::RobotModel & model)
+// Reject an override under a law's parameter prefix that the law does not
+// declare (e.g. a typo'd wbc.frction) BEFORE the robot moves — the config-as-data
+// payoff. We compare against the law's spec names directly (NOT has_parameter:
+// the controller node auto-declares parameters from overrides, so a typo IS a
+// declared parameter). A few runtime-owned params live under the wbc. prefix but
+// build the WBC reference rather than the controller, so they are exempted.
+void KontrolemController::validate_law_overrides(
+  const std::string & law, const kc::ParameterSpec & spec)
 {
-  const int nv = model.nv();
-  if (law == "lqr") {
-    const auto q_diag = node.get_parameter("lqr.q_diag").as_double_array();
-    const auto r_diag = node.get_parameter("lqr.r_diag").as_double_array();
-    const double q_dev_max = node.get_parameter("lqr.q_dev_max").as_double();
-    return std::make_unique<kctl::LqrController>(
-      actuated, diag_or_identity(q_diag, 2 * nv),
-      diag_or_identity(r_diag, static_cast<int>(actuated.size())), q_dev_max);
+  std::set<std::string> valid;     // names legitimately usable under a law prefix
+  std::set<std::string> prefixes;  // the namespaces this law owns (e.g. {"wbc"})
+  for (const auto & d : spec) {
+    valid.insert(d.name);
+    const auto dot = d.name.find('.');
+    if (dot != std::string::npos) prefixes.insert(d.name.substr(0, dot));
   }
-  if (law == "lqg") {
-    const int nq = model.nq();
-    const auto q_diag = node.get_parameter("lqg.q_diag").as_double_array();
-    const auto r_diag = node.get_parameter("lqg.r_diag").as_double_array();
-    const auto w_diag = node.get_parameter("lqg.w_diag").as_double_array();
-    const auto v_diag = node.get_parameter("lqg.v_diag").as_double_array();
-    const double innov_max = node.get_parameter("lqg.innov_max").as_double();
-    return std::make_unique<kctl::LqgController>(
-      actuated, diag_or_identity(q_diag, 2 * nv),
-      diag_or_identity(r_diag, static_cast<int>(actuated.size())),
-      diag_or_identity(w_diag, 2 * nv), diag_or_identity(v_diag, nq), innov_max);
+  // Runtime-owned params that share a law prefix (declared in on_init, consumed by
+  // the runtime to build the WBC reference) — not controller parameters, not typos.
+  valid.insert("wbc.base_height");
+  valid.insert("wbc.nominal_posture");
+
+  const auto & overrides = get_node()->get_node_parameters_interface()->get_parameter_overrides();
+  for (const auto & kv : overrides) {
+    const std::string & key = kv.first;
+    const auto dot = key.find('.');
+    if (dot == std::string::npos) continue;
+    if (prefixes.count(key.substr(0, dot)) == 0) continue;  // not this law's namespace
+    if (valid.count(key) != 0) continue;                    // a known parameter
+    std::string names;
+    for (const auto & d : spec) names += "\n    " + d.name;
+    throw std::runtime_error(
+      "control_law '" + law + "': unknown parameter '" + key +
+      "'. Valid parameters for this law are:" + names);
   }
-  if (law == "mpc") {
-    const auto q_diag = node.get_parameter("mpc.q_diag").as_double_array();
-    const auto r_diag = node.get_parameter("mpc.r_diag").as_double_array();
-    const int horizon = static_cast<int>(node.get_parameter("mpc.horizon").as_int());
-    const double dt_mpc = node.get_parameter("mpc.dt_mpc").as_double();
-    const double tau_max = node.get_parameter("mpc.tau_max").as_double();
-    return std::make_unique<kctl::MpcController>(
-      actuated, diag_or_identity(q_diag, 2 * nv),
-      diag_or_identity(r_diag, static_cast<int>(actuated.size())), horizon, dt_mpc, tau_max);
-  }
-  if (law == "qp") {
-    const auto w = node.get_parameter("qp.task_weight").as_double_array();
-    Eigen::VectorXd W = Eigen::VectorXd::Ones(nv);
-    if (static_cast<int>(w.size()) == nv) {
-      for (int i = 0; i < nv; ++i) {
-        W(i) = w[static_cast<std::size_t>(i)];
-      }
-    }
-    return std::make_unique<kctl::QpTaskSpaceController>(
-      actuated, W, node.get_parameter("qp.kp").as_double(),
-      node.get_parameter("qp.kd").as_double(), node.get_parameter("qp.tau_max").as_double());
-  }
-  if (law == "wbc") {
-    kctl::WbcController::Gains g;
-    g.kp_base = node.get_parameter("wbc.kp_base").as_double();
-    g.kd_base = node.get_parameter("wbc.kd_base").as_double();
-    g.kp_post = node.get_parameter("wbc.kp_post").as_double();
-    g.kd_post = node.get_parameter("wbc.kd_post").as_double();
-    g.w_base = node.get_parameter("wbc.w_base").as_double();
-    g.w_post = node.get_parameter("wbc.w_post").as_double();
-    g.w_force = node.get_parameter("wbc.w_force").as_double();
-    g.w_tau = node.get_parameter("wbc.w_tau").as_double();
-    g.mu = node.get_parameter("wbc.mu").as_double();
-    g.tau_max = node.get_parameter("wbc.tau_max").as_double();
-    g.max_iter = static_cast<int>(node.get_parameter("wbc.max_iter").as_int());
-    g.kp_swing = node.get_parameter("wbc.kp_swing").as_double();
-    g.kd_swing = node.get_parameter("wbc.kd_swing").as_double();
-    const auto feet = node.get_parameter("contact_frames").as_string_array();
-    return std::make_unique<kctl::WbcController>(feet, actuated, g);
-  }
-  if (law == "kinematic_gait") {
-    kctl::KinematicGaitController::Gains g;
-    g.kp = node.get_parameter("kin.kp").as_double();
-    g.kd = node.get_parameter("kin.kd").as_double();
-    g.tau_max = node.get_parameter("kin.tau_max").as_double();
-    g.ik_max_iter = static_cast<int>(node.get_parameter("kin.ik_max_iter").as_int());
-    g.ik_tol = node.get_parameter("kin.ik_tol").as_double();
-    g.ik_step_clamp = node.get_parameter("kin.ik_step_clamp").as_double();
-    const auto feet = node.get_parameter("contact_frames").as_string_array();
-    return std::make_unique<kctl::KinematicGaitController>(feet, actuated, g);
-  }
-  throw std::runtime_error(
-    "unknown control_law '" + law + "' (expected lqr/lqg/mpc/qp/wbc/kinematic_gait)");
 }
-}  // namespace
+
+std::unique_ptr<kc::Controller> KontrolemController::build_law(const std::string & law)
+{
+  // Discover the factories once (cheap, stateless) and index them by name().
+  if (!factory_loader_) {
+    factory_loader_ = std::make_shared<pluginlib::ClassLoader<kc::ControllerFactory>>(
+      "kontrolem_control", "kontrolem_control::ControllerFactory");
+    for (const auto & cls : factory_loader_->getDeclaredClasses()) {
+      auto inst = factory_loader_->createSharedInstance(cls);
+      factories_[inst->name()] = inst;
+    }
+  }
+  const auto it = factories_.find(law);
+  if (it == factories_.end()) {
+    std::string avail;
+    for (const auto & kv : factories_) avail += " " + kv.first;
+    throw std::runtime_error("unknown control_law '" + law + "' (available:" + avail + ")");
+  }
+  const auto & factory = it->second;
+  const kc::ParameterSpec spec = factory->parameter_spec();
+
+  // Declare + read this law's parameters generically from its schema, then reject
+  // any typo'd override before constructing.
+  kc::ParameterMap params(spec);
+  for (const auto & d : spec) {
+    params.set(d.name, declare_law_param(d));
+  }
+  validate_law_overrides(law, spec);
+
+  kc::BuildContext ctx;
+  ctx.actuated_joints = actuated_joints_;
+  ctx.contact_frames = get_node()->get_parameter("contact_frames").as_string_array();
+  return factory->create(params, *model_, ctx);
+}
 
 CallbackReturn KontrolemController::on_init()
 {
@@ -171,49 +175,20 @@ CallbackReturn KontrolemController::on_init()
     auto_declare<double>("gait.settle_tilt", 0.12);           // rad below which "settled"
     auto_declare<double>("gait.settle_hold", 0.3);            // s the settle must persist
     auto_declare<double>("gait.settle_timeout", 15.0);        // s hard fallback: step anyway
-    auto_declare<double>("kin.kp", 60.0);
-    auto_declare<double>("kin.kd", 2.0);
-    auto_declare<double>("kin.tau_max", 23.7);
-    auto_declare<int>("kin.ik_max_iter", 20);
-    auto_declare<double>("kin.ik_tol", 1.0e-6);
-    auto_declare<double>("kin.ik_step_clamp", 0.5);
-    auto_declare<std::vector<double>>("lqr.q_diag", {});
-    auto_declare<std::vector<double>>("lqr.r_diag", {});
-    auto_declare<double>("lqr.q_dev_max", 0.5);
-    auto_declare<std::vector<double>>("lqg.q_diag", {});
-    auto_declare<std::vector<double>>("lqg.r_diag", {});
-    auto_declare<std::vector<double>>("lqg.w_diag", {});
-    auto_declare<std::vector<double>>("lqg.v_diag", {});
-    auto_declare<double>("lqg.innov_max", 0.5);
-    auto_declare<std::vector<double>>("mpc.q_diag", {});
-    auto_declare<std::vector<double>>("mpc.r_diag", {});
-    auto_declare<int>("mpc.horizon", 30);
-    auto_declare<double>("mpc.dt_mpc", 0.02);
-    auto_declare<double>("mpc.tau_max", 100.0);
-    auto_declare<std::vector<double>>("qp.task_weight", {});
-    auto_declare<double>("qp.kp", 50.0);
-    auto_declare<double>("qp.kd", 10.0);
-    auto_declare<double>("qp.tau_max", 5.0);
-    // Floating-base / WBC.
+    // M16: each control law's OWN parameters (lqr.*, lqg.*, mpc.*, qp.*, wbc gains,
+    // kin.*) are no longer declared here. They live in that law's ControllerFactory
+    // parameter_spec() and are declared generically by build_law() in on_configure,
+    // so the schema has a single source of truth and a new law adds nothing here.
+    // Only the framework-owned, cross-law params below stay in the runtime.
+    // Floating-base / WBC structural + reference params (consumed by the RUNTIME,
+    // not by a controller constructor: base_height/nominal_posture build the WBC
+    // reference; the rest select interfaces).
     auto_declare<std::string>("base_type", "fixed");     // "fixed" or "floating"
     auto_declare<std::string>("base_gpio", "floating_base");
     auto_declare<std::string>("contact_gpio", "contact");
     auto_declare<std::vector<std::string>>("contact_frames", {});  // e.g. [foot_FL, ...]
     auto_declare<double>("wbc.base_height", 0.0);        // nominal base z of the stance
     auto_declare<std::vector<double>>("wbc.nominal_posture", {});  // per actuated joint
-    auto_declare<double>("wbc.kp_base", 100.0);
-    auto_declare<double>("wbc.kd_base", 20.0);
-    auto_declare<double>("wbc.kp_post", 25.0);
-    auto_declare<double>("wbc.kd_post", 5.0);
-    auto_declare<double>("wbc.w_base", 100.0);
-    auto_declare<double>("wbc.w_post", 1.0);
-    auto_declare<double>("wbc.w_force", 1e-4);
-    auto_declare<double>("wbc.w_tau", 1e-4);
-    auto_declare<double>("wbc.mu", 0.7);
-    auto_declare<double>("wbc.tau_max", 40.0);
-    auto_declare<int>("wbc.max_iter", 200);  // OSQP iteration cap (hard-RT bound)
-    auto_declare<double>("wbc.kp_swing", 400.0);  // swing-foot tracking (Locomotion)
-    auto_declare<double>("wbc.kd_swing", 40.0);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(get_node()->get_logger(), "on_init failed: %s", e.what());
     return CallbackReturn::ERROR;
@@ -393,7 +368,7 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
       supervisor_ = std::make_unique<kc::Supervisor>(blend);
       needs_velocity_ = false;  // claim the UNION of the hosted laws' needs (can't renegotiate)
       for (const auto & lname : laws_param) {
-        auto l = make_law(node, lname, actuated_joints_, *model_);
+        auto l = build_law(lname);
         if (!kc::accepts(*l, *problem_)) {
           RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept problem dialect %d",
                        lname.c_str(), static_cast<int>(problem_->kind()));
@@ -425,7 +400,7 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
                   laws_param.size(), control_law_.c_str(), blend);
     } else {
       const auto law = node.get_parameter("control_law").as_string();
-      law_ = make_law(node, law, actuated_joints_, *model_);
+      law_ = build_law(law);
       if (!kc::accepts(*law_, *problem_)) {
         RCLCPP_ERROR(node.get_logger(), "law '%s' does not accept problem dialect %d",
                      law.c_str(), static_cast<int>(problem_->kind()));

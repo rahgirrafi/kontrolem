@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_controller_example</name>
+  <version>0.0.1</version>
+  <description>
+    A minimal OUT-OF-TREE Kontrol'Em control law (M16 acceptance). It implements
+    the kontrolem_control::Controller contract, ships its own ControllerFactory,
+    exports it via pluginlib, and is selected with `control_law: example` — with
+    zero edits to kontrolem_ros2_control or kontrolem_controllers. It is the
+    worked template a third party copies to add their own controller.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>pluginlib</depend>
+  <depend>kontrolem_control</depend>
+  <depend>kontrolem_model</depend>
+
+  <test_depend>ament_cmake_test</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

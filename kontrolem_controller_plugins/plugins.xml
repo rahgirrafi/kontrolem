@@ -1,0 +1,30 @@
+<library path="kontrolem_controller_plugins">
+  <class type="kontrolem_controllers::LqrFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>LQR — precomputed static-gain state feedback (CARE-synthesized).</description>
+  </class>
+  <class type="kontrolem_controllers::LqgFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>LQG — output-feedback compensator (LQR + steady-state Kalman filter).</description>
+  </class>
+  <class type="kontrolem_controllers::LpvFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>LPV / gain scheduling — a grid of LQR designs interpolated on measured state.</description>
+  </class>
+  <class type="kontrolem_controllers::MpcFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>Linear MPC — condensed receding-horizon QP with input limits.</description>
+  </class>
+  <class type="kontrolem_controllers::QpFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>QP task-space — online inverse-dynamics QP with torque limits.</description>
+  </class>
+  <class type="kontrolem_controllers::WbcFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>Whole-body control — floating-base contact-aware inverse-dynamics QP.</description>
+  </class>
+  <class type="kontrolem_controllers::KinematicGaitFactory"
+         base_class_type="kontrolem_control::ControllerFactory">
+    <description>Kinematic gait — model-free gait + per-leg IK + joint PD.</description>
+  </class>
+</library>

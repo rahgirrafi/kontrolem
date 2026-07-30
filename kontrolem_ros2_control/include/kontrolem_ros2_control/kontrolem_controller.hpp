@@ -13,6 +13,7 @@
 #ifndef KONTROLEM_ROS2_CONTROL__KONTROLEM_CONTROLLER_HPP_
 #define KONTROLEM_ROS2_CONTROL__KONTROLEM_CONTROLLER_HPP_
 
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -23,7 +24,10 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "kontrolem_control/base_reference.hpp"
 #include "kontrolem_control/controller.hpp"
+#include "kontrolem_control/controller_factory.hpp"
+#include "kontrolem_control/params.hpp"
 #include "kontrolem_control/supervisor.hpp"
+#include "pluginlib/class_loader.hpp"
 #include "kontrolem_model/robot_model.hpp"
 #include "kontrolem_ros2_control/base_state_sensor.hpp"
 #include "kontrolem_ros2_control/contact_sensor.hpp"
@@ -55,6 +59,23 @@ public:
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
+  // M16 controller registry: control laws are pluginlib plugins discovered by
+  // name (their ControllerFactory::name()), NOT a hardcoded if/else. build_law()
+  // looks the selected law up, declares that law's parameters generically from
+  // its ParameterSpec, and constructs it — so a new controller drops in as its
+  // own package with zero edits here. Both the single- and multi-law paths use it.
+  std::shared_ptr<pluginlib::ClassLoader<kontrolem_control::ControllerFactory>> factory_loader_;
+  std::map<std::string, std::shared_ptr<kontrolem_control::ControllerFactory>> factories_;
+  std::unique_ptr<kontrolem_control::Controller> build_law(const std::string & law);
+  // Declare one parameter from its ParamDesc (dispatching on its variant type)
+  // and return the read value; used by build_law over a law's whole spec.
+  kontrolem_control::ParamValue declare_law_param(const kontrolem_control::ParamDesc & desc);
+  // Config validation (the M16 typo-catch): reject an override under a law's
+  // parameter prefix that the law does not declare (e.g. wbc.frction), before the
+  // robot moves. Throws with a clear message; runtime-owned params are exempt.
+  void validate_law_overrides(
+    const std::string & law, const kontrolem_control::ParameterSpec & spec);
+
   // Core (ROS-free) objects.
   std::optional<kontrolem_model::RobotModel> model_;
   std::unique_ptr<kontrolem_control::Controller> law_;             // single-law mode

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_controller_plugins</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 discovery bridge (M16): exports the shipped control-law
+    factories (kontrolem_controllers) as pluginlib plugins under the
+    kontrolem_control::ControllerFactory base class, so the runtime finds each
+    law by name at load time. This is the ONLY place pluginlib touches the
+    controller stack besides the L4 runtime — keeping kontrolem_control and
+    kontrolem_controllers ROS-free. A third-party law ships its own package like
+    this one and drops in with zero edits to the runtime.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>pluginlib</depend>
+  <depend>kontrolem_control</depend>
+  <depend>kontrolem_controllers</depend>
+  <depend>kontrolem_model</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
