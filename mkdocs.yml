@@ -47,6 +47,7 @@ nav:
   - How-to guides:
       - Switch the control law: how-to/switch-control-law.md
       - Add your own controller: how-to/add-a-controller.md
+      - Analyze & tune a controller offline: how-to/analyze-and-tune.md
       - Follow a moving reference: how-to/track-a-moving-reference.md
       - Tune a controller: how-to/tune-a-controller.md
       - Read diagnostics: how-to/read-diagnostics.md

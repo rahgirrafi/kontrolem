@@ -3,6 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <set>
 #include <stdexcept>
 
@@ -142,6 +146,8 @@ CallbackReturn KontrolemController::on_init()
     // Publish the gait's planned per-foot contact schedule for the estimator (M12).
     auto_declare<bool>("publish_planned_contact", false);
     auto_declare<std::string>("planned_contact_topic", "/planned_contact");
+    // M18: non-empty -> write a run-provenance manifest at on_configure.
+    auto_declare<std::string>("provenance_dir", "");
     auto_declare<std::vector<double>>("q_ref", {});
     auto_declare<std::vector<double>>("v_ref", {});
     // Reference: "setpoint" (Regulation), "harmonic" (Tracking, fixed-base), or for the
@@ -446,11 +452,62 @@ CallbackReturn KontrolemController::on_configure(const rclcpp_lifecycle::State &
       node.get_logger(),
       "configured control_law='%s' on %d-DoF model, %zu actuated (needs_velocity=%s)",
       control_law_.c_str(), nv, actuated_joints_.size(), needs_velocity_ ? "true" : "false");
+
+    write_provenance();
   } catch (const std::exception & e) {
     RCLCPP_ERROR(node.get_logger(), "on_configure failed: %s", e.what());
     return CallbackReturn::ERROR;
   }
   return CallbackReturn::SUCCESS;
+}
+
+// M18 run provenance: when provenance_dir is set, record the EXACT resolved
+// configuration of this run — every declared parameter (the URDF XML replaced
+// by a hash) — as a YAML manifest, so any experiment can be reproduced from its
+// artifacts alone. A provenance failure only warns: recording must never take
+// down control.
+void KontrolemController::write_provenance()
+{
+  const auto node = get_node();
+  const std::string dir = node->get_parameter("provenance_dir").as_string();
+  if (dir.empty()) return;
+  try {
+    std::filesystem::create_directories(dir);
+    char stamp[32];
+    const std::time_t now = std::time(nullptr);
+    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d_%H-%M-%S", std::localtime(&now));
+    const std::string path = dir + "/" + stamp + "_manifest.yaml";
+
+    std::ofstream f(path);
+    if (!f) throw std::runtime_error("cannot open " + path);
+    f << "# Kontrol'Em run provenance — the resolved configuration at on_configure.\n"
+      << "stamp: " << stamp << "\n"
+      << "controller: " << node->get_name() << "\n";
+
+    // The URDF is huge and lives in the robot description repo; a stable hash
+    // identifies it (FNV-1a 64 — an identity check, not a cryptographic one).
+    const std::string urdf = node->get_parameter("robot_description").as_string();
+    std::uint64_t h = 1469598103934665603ull;
+    for (const unsigned char c : urdf) {
+      h = (h ^ c) * 1099511628211ull;
+    }
+    char hex[20];
+    std::snprintf(hex, sizeof(hex), "%016llx", static_cast<unsigned long long>(h));
+    f << "urdf_hash: fnv1a64:" << hex << "\n"
+      << "parameters:\n";
+
+    const auto names = node->list_parameters({}, 0).names;
+    std::vector<std::string> sorted(names.begin(), names.end());
+    std::sort(sorted.begin(), sorted.end());
+    for (const auto & n : sorted) {
+      if (n == "robot_description" || n == "use_sim_time") continue;
+      const auto p = node->get_parameter(n);
+      f << "  " << n << ": " << rclcpp::to_string(p.get_parameter_value()) << "\n";
+    }
+    RCLCPP_INFO(node->get_logger(), "run provenance written to %s", path.c_str());
+  } catch (const std::exception & e) {
+    RCLCPP_WARN(node->get_logger(), "provenance not written: %s", e.what());
+  }
 }
 
 InterfaceConfiguration KontrolemController::command_interface_configuration() const

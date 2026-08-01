@@ -75,6 +75,10 @@ private:
   // robot moves. Throws with a clear message; runtime-owned params are exempt.
   void validate_law_overrides(
     const std::string & law, const kontrolem_control::ParameterSpec & spec);
+  // M18 run provenance: when provenance_dir is set, write the resolved
+  // configuration (all declared params, URDF as a hash) as a YAML manifest at
+  // the end of a successful on_configure. Failures warn, never abort.
+  void write_provenance();
 
   // Core (ROS-free) objects.
   std::optional<kontrolem_model::RobotModel> model_;

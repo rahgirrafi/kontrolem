@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>kontrolem_workbench</name>
+  <version>0.0.1</version>
+  <description>
+    Kontrol'Em v2 offline design workbench (M18): the `kontrolem_setup` CLI a
+    control engineer uses BEFORE the robot moves. Discovers the installed
+    control laws through the M16 pluginlib registry (list/describe), validates
+    and scaffolds deployment YAMLs against each law's ParameterSpec (lint/new),
+    and analyzes a configured law offline: closed-loop test-signal simulation
+    with time-domain metrics for every law, plus law-specific analysis panes
+    (eigenvalues, interpolation gaps, imposed-dynamics predictions). The engine
+    is the same ROS-free core the runtime deploys, so what you analyze is
+    byte-identical to what runs.
+  </description>
+  <maintainer email="rahgirrafi@gmail.com">Rahgir Rafi</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>kontrolem_control</depend>
+  <depend>kontrolem_controllers</depend>
+  <depend>kontrolem_model</depend>
+  <depend>pluginlib</depend>
+  <depend>yaml_cpp_vendor</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

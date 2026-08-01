@@ -4,6 +4,9 @@
 
 All parameters are set under `kontrolem_controller: { ros__parameters: … }` unless noted. Array lengths use `nq` (configuration size) and `nv` (velocity size); for a fixed-base robot `nq == nv`, for a floating base `nq == nv + 1`.
 
+!!! tip "The schemas themselves are the source of truth"
+    Since M16 every law carries its parameter schema as data, and the workbench reads it live: `kontrolem_setup describe <law>` prints the current schema of any installed law (including third-party ones this page cannot know about), and `kontrolem_setup docs` emits these tables as markdown. If this page and the tool ever disagree, **the tool is right** — and `kontrolem_setup lint` validates your YAML against the same schemas before anything launches.
+
 ## controller_manager
 
 | Parameter | Type | Default | Meaning |
@@ -28,6 +31,7 @@ All parameters are set under `kontrolem_controller: { ros__parameters: … }` un
 | `state_velocity_interface` | string | `velocity` | State interface read for joint velocity. |
 | `safe_action` | string | `zero` | Supervisor fallback when `status().ok` is false. `zero` is the only implemented action. |
 | `publish_diagnostics` | bool | `false` | Publish `ControllerDiagnostics` on `~/diagnostics` each tick. |
+| `provenance_dir` | string | `""` | Non-empty → write a run-provenance manifest (every resolved parameter + a URDF hash) to this directory at `on_configure`. See [the workbench](../how-to/analyze-and-tune.md). |
 
 ## Problem / reference
 
